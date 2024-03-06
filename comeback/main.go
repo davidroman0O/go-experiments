@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,8 +13,6 @@ import (
 	"sync/atomic"
 	"syscall"
 	"unsafe"
-
-	"golang.org/x/exp/slog"
 )
 
 const (

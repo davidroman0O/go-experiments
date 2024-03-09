@@ -9,9 +9,9 @@ import (
 )
 
 const (
-	numMessages      = 50000000        // Number of messages to process
+	numMessages      = 30000000        // Number of messages to process
 	ringBufferSize   = 1024 * 1024 * 4 // Size of the ring buffer
-	messageBatchSize = 1024            // Number of messages to process in a batch
+	messageBatchSize = 1024 * 8        // Number of messages to process in a batch
 )
 
 // Message is the basic data structure representing a message
@@ -19,6 +19,9 @@ type Message struct {
 	Value int
 	Kill  bool // Flag to indicate a kill message
 }
+
+// type Actor interface{}
+// type HashBuffer map[Actor]map[Message]bool
 
 // RingBuffer is a lock-free ring buffer for message passing
 type RingBuffer struct {
@@ -160,27 +163,61 @@ func Worker(id int, wg *sync.WaitGroup, rb *RingBuffer, quit chan struct{}) {
 	}
 }
 
+// MultiRingBuffer manages multiple RingBuffers
+type MultiRingBuffer struct {
+	buffers []*RingBuffer
+	next    int // For simple round-robin scheduling
+}
+
+func newMultiRingBuffer(numBuffers int, size int, quit chan struct{}) *MultiRingBuffer {
+	buffers := make([]*RingBuffer, numBuffers)
+	for i := range buffers {
+		buffers[i] = newRingBuffer(size, quit)
+	}
+	return &MultiRingBuffer{buffers: buffers}
+}
+
+// Enqueue attempts to enqueue a message to one of the RingBuffers, using a simple round-robin strategy
+func (mrb *MultiRingBuffer) enqueue(msg Message) bool {
+	for i := 0; i < len(mrb.buffers); i++ {
+		if mrb.buffers[mrb.next].enqueue(msg) {
+			mrb.next = (mrb.next + 1) % len(mrb.buffers)
+			return true
+		}
+		mrb.next = (mrb.next + 1) % len(mrb.buffers)
+	}
+	// All buffers are full
+	return false
+}
+
+// EnqueueMany attempts to enqueue a batch of messages, distributing them across the buffers
+func (mrb *MultiRingBuffer) enqueueMany(msgs []Message) bool {
+	for _, msg := range msgs {
+		if !mrb.enqueue(msg) {
+			return false
+		}
+	}
+	return true
+}
+
 var constantCPU = (runtime.NumCPU() * runtime.NumCPU()) - 1
 var numWorkers = runtime.NumCPU() - (runtime.NumCPU() / 2) // Number of worker goroutines
 
 func main() {
-
 	// Set GOMAXPROCS to utilize multiple CPU cores
 	runtime.GOMAXPROCS(constantCPU)
 
 	// Create a quit channel to signal workers to stop
 	quit := make(chan struct{})
 
-	// Create a ring buffer for message passing
-	rb := newRingBuffer(ringBufferSize, quit)
+	// Create a MultiRingBuffer for message passing
+	mrb := newMultiRingBuffer(numWorkers, ringBufferSize, quit)
 
-	// Create a WaitGroup to wait for all workers to finish
+	// Create workers for each RingBuffer in MultiRingBuffer
 	var wg sync.WaitGroup
 	wg.Add(numWorkers)
-
-	// Start worker goroutines
 	for i := 0; i < numWorkers; i++ {
-		go Worker(i, &wg, rb, quit)
+		go Worker(i, &wg, mrb.buffers[i], quit)
 	}
 
 	// Generate and enqueue messages
@@ -191,24 +228,24 @@ func main() {
 		for j := 0; j < len(batch); j++ {
 			batch[j] = Message{Value: i + j}
 		}
-		for !rb.enqueueMany(batch) {
-			// Ring buffer is full, wait for workers to catch up
+		for !mrb.enqueueMany(batch) {
+			// MultiRingBuffer is full, wait for workers to catch up
 			time.Sleep(10 * time.Nanosecond)
 		}
 		produced += len(batch)
-		// fmt.Printf("Produced %d messages - %v \n", produced, time.Now().String())
 	}
 
-	// Send a kill message to each worker
-	for i := 0; i < numWorkers; i++ {
+	// Send a kill message to each worker by enqueueing it directly to each buffer
+	for _, buffer := range mrb.buffers {
 		killMsg := Message{Kill: true}
-		for !rb.enqueue(killMsg) {
-			// Ring buffer is full, wait a bit and try again
+		for !buffer.enqueue(killMsg) {
+			// If a buffer is full, wait a bit and try again
 			time.Sleep(10 * time.Nanosecond)
 		}
 	}
 
-	rb.close()
+	// Close the quit channel to signal workers to stop
+	close(quit)
 	// Wait for all workers to finish
 	wg.Wait()
 	elapsed := time.Since(start)

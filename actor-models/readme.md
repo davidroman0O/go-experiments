@@ -6,3 +6,11 @@ Either `go` will need more memory control with less GC disruptions or it will re
 
 I'm willing to push the experiment further but i will be forced to use `CGO` ¯\_(ツ)_/¯
 
+Resources of people that tried disruptor too but didn't had 300M/s 
+- https://github.com/smarty-prototypes/go-disruptor
+- https://github.com/notbdu/goruptor
+
+Note that only one of my experiment reached 300M/s on my cpu but... everything when 100% super quickly which is not sustainable.
+
+Good doc https://lmax-exchange.github.io/disruptor/
+

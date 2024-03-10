@@ -1,0 +1,1 @@
+time to speed run `zig` lmao https://learnxinyminutes.com/docs/zig/

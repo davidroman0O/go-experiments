@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -12,6 +13,10 @@ import (
 /// I can't do a Michael-Scott queue algorithm because i will have issues with the GC maintaining nested arrays
 
 func main() {
+
+	numCores := runtime.NumCPU()
+	runtime.GOMAXPROCS(numCores)
+
 	rb := NewRingBuffer[int]()
 	defer rb.Close()
 	var wg sync.WaitGroup
@@ -20,7 +25,7 @@ func main() {
 	ctx, cancel := context.WithTimeout(clockTimeout, 10*time.Second)
 
 	producers := 4
-	elements := 100_000
+	elements := 1_000_000
 	var produced uint32 = 0
 	var total uint32 = 0
 
@@ -91,6 +96,22 @@ func main() {
 		}
 	}()
 
+	// every 5 seconds downsize the buffer
+	go func() {
+		ticker := time.NewTicker(2 * time.Second)
+		for {
+			select {
+			case <-ticker.C:
+				fmt.Println("current size", rb.Capacity(), rb.Length())
+				rb.Downsize()
+				fmt.Println("new size", rb.Capacity(), rb.Length())
+			case <-ctx.Done():
+				ticker.Stop()
+				return
+			}
+		}
+	}()
+
 	wg.Wait()
 	defer cancel()
 	fmt.Println(
@@ -100,6 +121,8 @@ func main() {
 		formatNumber(atomic.LoadUint32(&produced)),
 		"consumed",
 		formatNumber(atomic.LoadUint32(&total)))
+	rb.Downsize()
+	fmt.Println("final buffer size", rb.Capacity(), rb.Length(), defaultRingBufferSize)
 }
 
 func formatNumber(num uint32) string {

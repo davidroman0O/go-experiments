@@ -8,8 +8,10 @@ import (
 	"time"
 )
 
+/// This is by far the best one i got, i need to refactor that one to be used on gronos
+
 const (
-	numMessages      = 30000000        // Number of messages to process
+	numMessages      = 40000000        // Number of messages to process
 	ringBufferSize   = 1024 * 1024 * 4 // Size of the ring buffer
 	messageBatchSize = 1024 * 8        // Number of messages to process in a batch
 )
@@ -20,17 +22,14 @@ type Message struct {
 	Kill  bool // Flag to indicate a kill message
 }
 
-// type Actor interface{}
-// type HashBuffer map[Actor]map[Message]bool
-
 // RingBuffer is a lock-free ring buffer for message passing
 type RingBuffer struct {
-	buf        []Message
-	head       uint64
-	tail       uint64
-	tailCached uint64
-	notifier   chan struct{} // Added notifier channel
-	quit       chan struct{} // Added notifier channel
+	buf  []Message
+	head uint64
+	tail uint64
+	// tailCached uint64
+	notifier chan struct{} // Added notifier channel
+	quit     chan struct{} // Added notifier channel
 }
 
 func newRingBuffer(size int, quit chan struct{}) *RingBuffer {
@@ -138,7 +137,7 @@ func (rb *RingBuffer) has() bool {
 }
 
 // Worker function adjusted to use notifier for pausing and resuming
-func Worker(id int, wg *sync.WaitGroup, rb *RingBuffer, quit chan struct{}) {
+func Worker(id int, cb func(nb int32), wg *sync.WaitGroup, rb *RingBuffer, quit chan struct{}) {
 	defer wg.Done()
 	for {
 		msgs, ok := rb.dequeueMany(messageBatchSize)
@@ -149,6 +148,7 @@ func Worker(id int, wg *sync.WaitGroup, rb *RingBuffer, quit chan struct{}) {
 				runtime.Gosched()
 				continue
 			case <-quit: // Check if we're quitting
+				fmt.Println("quit", id)
 				return
 			}
 		}
@@ -160,6 +160,7 @@ func Worker(id int, wg *sync.WaitGroup, rb *RingBuffer, quit chan struct{}) {
 			// Simulate some work on the message
 			_ = msg.Value * 2
 		}
+		cb(int32(len(msgs)))
 	}
 }
 
@@ -213,11 +214,17 @@ func main() {
 	// Create a MultiRingBuffer for message passing
 	mrb := newMultiRingBuffer(numWorkers, ringBufferSize, quit)
 
+	var total uint32 = 0
+
+	cb := func(nb int32) {
+		atomic.AddUint32(&total, uint32(nb))
+	}
+
 	// Create workers for each RingBuffer in MultiRingBuffer
 	var wg sync.WaitGroup
 	wg.Add(numWorkers)
 	for i := 0; i < numWorkers; i++ {
-		go Worker(i, &wg, mrb.buffers[i], quit)
+		go Worker(i, cb, &wg, mrb.buffers[i], quit)
 	}
 
 	// Generate and enqueue messages
@@ -244,13 +251,15 @@ func main() {
 		}
 	}
 
-	// Close the quit channel to signal workers to stop
-	close(quit)
 	// Wait for all workers to finish
 	wg.Wait()
+
+	// Close the quit channel to signal workers to stop
+	close(quit)
+
 	elapsed := time.Since(start)
 
-	fmt.Printf("Processed %d messages in %s\n", numMessages, elapsed)
+	fmt.Printf("Processed %d messages in %s - produced %d - total processed: %v \n", numMessages, elapsed, produced, total)
 }
 
 // Utility function to calculate the minimum of two integers

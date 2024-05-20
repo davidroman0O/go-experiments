@@ -50,7 +50,7 @@ func main() {
 		}(p)
 	}
 
-	consumers := 4
+	consumers := numCores
 
 	closed := false
 	closer := func() {

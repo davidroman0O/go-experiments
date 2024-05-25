@@ -48,7 +48,7 @@ func main() {
 					for i := 0; i < elements; i++ {
 						many = append(many, i)
 					}
-					rb.Enqueue(many)
+					<-rb.Enqueue(many)
 					atomic.AddUint32(&produced, uint32(elements))
 				}
 			}

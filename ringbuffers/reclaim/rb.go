@@ -3,10 +3,50 @@ package main
 import (
 	"context"
 	"math/rand"
-	"runtime"
 	"sync/atomic"
 	"time"
 )
+
+///
+///	General concept of that RingBuffer:
+///
+///             +--------------------------------------------------------+
+///             |                                                        |
+///             |                                                        |
+/// +----------------------+      +----------+                           |
+/// |           |          |      |          |                           |
+/// |           |          | +--> |          |                           |
+/// |           |          |      |          |                           |
+/// +----------------------+      |          |                           |
+///             |                 |          |                           |
+///             |       +         |          |                           |
+///             |       |         |          |                           |
+///             |       |         |          |                           |
+///             |       |         |          |         +---------------+ |
+///             |       |         +----------+ Tail    |   consumer    +--->
+///             |       |         |----------|         +---------------+ |
+///             |       |         |--|Data|--|         +---------------+ |
+///             |       |         |----------|  +----->+   consumer    +--->
+///             |       |         |----------|         +---------------+ |
+///             |       v         +----------+ Head    +---------------+ |
+///             |    +-----+      |          |         |   consumer    +--->
+///             |    |     |      |          |         +---------------+ |
+///             |    |     | +--> |          |                           |
+///             |    +-----+      |          |                           |
+///             |                 |          |                           |
+///             |                 |          |                           |
+///             |                 |          |       Ticker              |
+///             |                 |          |                           |
+///             |                 +----------+                           |
+///             |                                                        |
+///             +--------------------------------------------------------+
+///
+/// The ring buffer is a fixed-size buffer with a single writer and multiple readers.
+/// The writer enqueues messages into the buffer and the readers dequeue messages from the buffer.
+/// A clock tick is used to regulate the rate of messages being enqueued and dequeued.
+/// There is a backpressure mechanism that will slow down the writer if the buffer is full or not enough messages have been dequeued.
+/// The buffer can be resized dynamically to accommodate more messages.
+/// The developer can request the buffer to be resized by calling the Downsize() method to reduce it's memory footprint.
 
 const (
 	defaultMessageBatchSize = 1024 * 8        // Number of messages to process in a batch
@@ -73,8 +113,13 @@ func (rb *RingBuffer[T]) Close() {
 	close(rb.entryChan)
 }
 
-func (rb *RingBuffer[T]) Enqueue(msgs []T) {
+// Potentially enqueue your messages into the RingBuffer but return a channel that will be closed when the messages are actually enqueued.
+// In order to regulate the rate of messages being enqueued, the function will wait until enough messages have been dequeued before enqueuing the next batch.
+// That waiting behaviour might not be triggered if the buffer got enough space to enqueue all messages.
+// We could have wait and hide the behaviour from the user but we decided to expose it to give more control to the user. Most of your use cases should need to wait.
+func (rb *RingBuffer[T]) Enqueue(msgs []T) <-chan struct{} {
 	done := make(chan struct{})
+	// TODO: we need to change the waiting condition to optimize the write/read
 	go func() {
 		ticker := time.NewTicker(1 * time.Nanosecond)
 		for {
@@ -85,20 +130,23 @@ func (rb *RingBuffer[T]) Enqueue(msgs []T) {
 				ticker.Stop()
 				return
 			case <-ticker.C:
+				// TODO: optimize this
 				if atomic.LoadUint64(&rb.dequeueCount) >= atomic.LoadUint64(&rb.enqueueCount) {
 					done <- struct{}{}
 					close(done)
 					ticker.Stop()
 					return
 				}
-				runtime.Gosched()
+				// runtime.Gosched()
 			}
-
 		}
 	}()
-	<-done
-	rb.entryChan <- msgs
-	atomic.AddUint64(&rb.enqueueCount, uint64(len(msgs)))
+	go func() {
+		<-done
+		rb.entryChan <- msgs
+		atomic.AddUint64(&rb.enqueueCount, uint64(len(msgs)))
+	}()
+	return done
 }
 
 func (rb *RingBuffer[T]) dequeueMany(n int) []T {

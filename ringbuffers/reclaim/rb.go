@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"math/rand"
+	"runtime"
 	"sync/atomic"
+	"time"
 )
 
 const (
@@ -10,18 +13,23 @@ const (
 	defaultRingBufferSize   = 1024 * 1024 * 4 // Size of the ring buffer
 )
 
-// RingBuffer is a lock-free ring buffer for message passing
 type RingBuffer[T any] struct {
-	buf         []T
-	head        uint64
-	tail        uint64
-	entryChan   chan []T
-	notifier    chan struct{} // notify when a new messages is enqueued
-	subscribers []chan []T    // TODO implement
+	context   context.Context
+	buf       []T
+	head      uint64
+	tail      uint64
+	entryChan chan []T
+
+	subscribers []chan []T
 	batchSize   int
 
-	resizeRequested uint32
-	resizing        uint32
+	downsizeRequested uint32
+	upsizeRequested   uint32
+	downsizing        uint32
+	upsizing          uint32
+
+	enqueueCount uint64
+	dequeueCount uint64
 }
 
 type ringBufferConfig struct {
@@ -43,7 +51,7 @@ func WithBatchSize(batchSize int) Option {
 	}
 }
 
-func NewRingBuffer[T any](opts ...Option) *RingBuffer[T] {
+func NewRingBuffer[T any](ctx context.Context, opts ...Option) *RingBuffer[T] {
 	c := ringBufferConfig{
 		size:      defaultRingBufferSize,
 		batchSize: defaultMessageBatchSize,
@@ -52,28 +60,51 @@ func NewRingBuffer[T any](opts ...Option) *RingBuffer[T] {
 		opt(&c)
 	}
 	return &RingBuffer[T]{
+		context:   ctx,
 		buf:       make([]T, c.size),
 		head:      0,
 		batchSize: c.batchSize,
 		tail:      0,
-		entryChan: make(chan []T, c.size/c.batchSize), // Buffer based on size/batchSize
-		notifier:  make(chan struct{}, 1),             // Buffer of 1 to avoid blocking
+		entryChan: make(chan []T, c.size/c.batchSize),
 	}
 }
 
 func (rb *RingBuffer[T]) Close() {
-	close(rb.notifier)
 	close(rb.entryChan)
 }
 
 func (rb *RingBuffer[T]) Enqueue(msgs []T) {
+	done := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(1 * time.Nanosecond)
+		for {
+			select {
+			case <-rb.context.Done():
+				done <- struct{}{}
+				close(done)
+				ticker.Stop()
+				return
+			case <-ticker.C:
+				if atomic.LoadUint64(&rb.dequeueCount) >= atomic.LoadUint64(&rb.enqueueCount) {
+					done <- struct{}{}
+					close(done)
+					ticker.Stop()
+					return
+				}
+				runtime.Gosched()
+			}
+
+		}
+	}()
+	<-done
 	rb.entryChan <- msgs
+	atomic.AddUint64(&rb.enqueueCount, uint64(len(msgs)))
 }
 
 func (rb *RingBuffer[T]) dequeueMany(n int) []T {
 	var msgs []T
+	head := atomic.LoadUint64(&rb.head)
 	tail := atomic.LoadUint64(&rb.tail)
-	head := rb.head
 
 	for i := 0; i < n && tail != head; i++ {
 		msg := rb.buf[head&uint64(len(rb.buf)-1)]
@@ -81,25 +112,23 @@ func (rb *RingBuffer[T]) dequeueMany(n int) []T {
 		head++
 	}
 	atomic.StoreUint64(&rb.head, head)
+	atomic.AddUint64(&rb.dequeueCount, uint64(len(msgs)))
 	return msgs
 }
 
-// Capacity returns the total size of the buffer
 func (rb *RingBuffer[T]) Capacity() int {
 	return len(rb.buf)
 }
 
-// Length returns the number of elements currently in the buffer
 func (rb *RingBuffer[T]) Length() int {
 	head := atomic.LoadUint64(&rb.head)
 	tail := atomic.LoadUint64(&rb.tail)
 	return int(tail - head)
 }
 
-// Has checks if there are available messages in the RingBuffer
 func (rb *RingBuffer[T]) Has() bool {
+	head := atomic.LoadUint64(&rb.head)
 	tail := atomic.LoadUint64(&rb.tail)
-	head := rb.head
 	return tail != head
 }
 
@@ -116,45 +145,26 @@ func (rb *RingBuffer[T]) Unsubscribe(subscriber chan []T) {
 	}
 }
 
-// Downsize requests a resize operation to be performed during the next Tick
 func (rb *RingBuffer[T]) Downsize() {
-	atomic.StoreUint32(&rb.resizeRequested, 1)
+	atomic.StoreUint32(&rb.downsizeRequested, 1)
 }
 
-// performResize shrinks the buffer to clean up unused indexes and recomputes head and tail
-func (rb *RingBuffer[T]) performResize() {
-	// Lock the buffer
-	atomic.StoreUint32(&rb.resizing, 1)
-	defer atomic.StoreUint32(&rb.resizing, 0)
-
-	// Calculate the number of unprocessed messages
-	head := atomic.LoadUint64(&rb.head)
-	tail := atomic.LoadUint64(&rb.tail)
-	numUnprocessed := tail - head
-
-	// Create a new buffer with the size of unprocessed messages
-	newBuf := make([]T, numUnprocessed)
-	for i := uint64(0); i < numUnprocessed; i++ {
-		newBuf[i] = rb.buf[(head+i)&uint64(len(rb.buf)-1)]
-	}
-
-	// Update buffer and reset head and tail
-	rb.buf = newBuf
-	atomic.StoreUint64(&rb.head, 0)
-	atomic.StoreUint64(&rb.tail, numUnprocessed)
-}
-
-// When triggered by a clock, the ring buffer will dispatch messages to subscribers
 func (rb *RingBuffer[T]) Tick() {
-	// Check if a resize operation has been requested
-	if atomic.LoadUint32(&rb.resizing) == 1 {
+	if atomic.LoadUint32(&rb.downsizing) == 1 || atomic.LoadUint32(&rb.upsizing) == 1 {
 		return
 	}
 
-	if atomic.CompareAndSwapUint32(&rb.resizeRequested, 1, 0) {
-		atomic.StoreUint32(&rb.resizing, 1)
-		rb.performResize()
-		atomic.StoreUint32(&rb.resizing, 0)
+	if atomic.CompareAndSwapUint32(&rb.upsizeRequested, 1, 0) {
+		atomic.StoreUint32(&rb.upsizing, 1)
+		rb.resizeBuffer(rb.batchSize)
+		atomic.StoreUint32(&rb.upsizing, 0)
+		return
+	}
+
+	if atomic.CompareAndSwapUint32(&rb.downsizeRequested, 1, 0) {
+		atomic.StoreUint32(&rb.downsizing, 1)
+		rb.resizeBuffer(-rb.batchSize)
+		atomic.StoreUint32(&rb.downsizing, 0)
 		return
 	}
 
@@ -162,34 +172,64 @@ func (rb *RingBuffer[T]) Tick() {
 		return
 	}
 
-	has := true
-	// Process entries from the entry channel
-	for has {
+	for {
 		select {
 		case msgs := <-rb.entryChan:
-			tail := atomic.LoadUint64(&rb.tail)
-			head := atomic.LoadUint64(&rb.head)
-
-			// Check if there is enough space to enqueue all messages
-			if tail+uint64(len(msgs))-head > uint64(len(rb.buf)) {
-				continue // Not enough space
-			}
-
-			for _, msg := range msgs {
-				rb.buf[tail&uint64(len(rb.buf)-1)] = msg
-				tail++
-			}
-
-			atomic.StoreUint64(&rb.tail, tail)
+			rb.enqueueMessages(msgs)
 		default:
-			has = false
+			msgs := rb.dequeueMany(rb.batchSize)
+			if len(msgs) == 0 {
+				return
+			}
+			rb.dispatchMessages(msgs)
 		}
 	}
+}
 
-	// Dispatch messages to subscribers
-	msgs := rb.dequeueMany(rb.batchSize)
+func (rb *RingBuffer[T]) resizeBuffer(change int) {
+	head := atomic.LoadUint64(&rb.head)
+	tail := atomic.LoadUint64(&rb.tail)
+	numUnprocessed := tail - head
 
-	// Split messages into unique parts
+	newBufSize := len(rb.buf) + change
+	if newBufSize < int(numUnprocessed) {
+		newBufSize = int(numUnprocessed)
+	}
+
+	newBuf := make([]T, newBufSize)
+
+	if head <= tail {
+		copy(newBuf, rb.buf[head%uint64(len(rb.buf)):tail%uint64(len(rb.buf))])
+	} else {
+		part1Len := len(rb.buf) - int(head%uint64(len(rb.buf)))
+		copy(newBuf, rb.buf[head%uint64(len(rb.buf)):])
+		copy(newBuf[part1Len:], rb.buf[:tail%uint64(len(rb.buf))])
+	}
+
+	rb.buf = newBuf
+	atomic.StoreUint64(&rb.head, 0)
+	atomic.StoreUint64(&rb.tail, numUnprocessed)
+}
+
+func (rb *RingBuffer[T]) enqueueMessages(msgs []T) {
+	tail := atomic.LoadUint64(&rb.tail)
+	head := atomic.LoadUint64(&rb.head)
+
+	// Check if there is enough space to enqueue all messages
+	// We want to minimize the number of times we resize the buffer
+	if tail+uint64(len(msgs)*2)-head > uint64(len(rb.buf)) {
+		atomic.StoreUint32(&rb.upsizeRequested, 1)
+	}
+
+	for _, msg := range msgs {
+		rb.buf[tail&uint64(len(rb.buf)-1)] = msg
+		tail++
+	}
+
+	atomic.StoreUint64(&rb.tail, tail)
+}
+
+func (rb *RingBuffer[T]) dispatchMessages(msgs []T) {
 	numSubscribers := len(rb.subscribers)
 	msgParts := make([][]T, numSubscribers)
 	for i, msg := range msgs {
@@ -197,13 +237,24 @@ func (rb *RingBuffer[T]) Tick() {
 		msgParts[idx] = append(msgParts[idx], msg)
 	}
 
-	// Randomize the order of subscribers
 	rand.Shuffle(len(rb.subscribers), func(i, j int) {
 		rb.subscribers[i], rb.subscribers[j] = rb.subscribers[j], rb.subscribers[i]
 	})
 
 	for i, sub := range rb.subscribers {
-		part := msgParts[i]
-		sub <- part
+		sub <- msgParts[i]
 	}
+}
+
+func (rb *RingBuffer[T]) NormalizedDelta() float64 {
+	enqueueCount := atomic.LoadUint64(&rb.enqueueCount)
+	dequeueCount := atomic.LoadUint64(&rb.dequeueCount)
+	delta := int64(enqueueCount) - int64(dequeueCount)
+	return float64(delta) / float64(rb.batchSize)
+}
+
+func (rb *RingBuffer[T]) Delta() int64 {
+	enqueueCount := atomic.LoadUint64(&rb.enqueueCount)
+	dequeueCount := atomic.LoadUint64(&rb.dequeueCount)
+	return int64(enqueueCount) - int64(dequeueCount)
 }

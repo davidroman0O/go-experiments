@@ -11,20 +11,25 @@ import (
 )
 
 /// I can't do a Michael-Scott queue algorithm because i will have issues with the GC maintaining nested arrays
+/// Should have one producer of a lot of messages and many consumers
 
 func main() {
 
 	numCores := runtime.NumCPU()
 	runtime.GOMAXPROCS(numCores)
 
-	rb := NewRingBuffer[int]()
-	defer rb.Close()
-	var wg sync.WaitGroup
-
 	clockTimeout := context.Background()
 	ctx, cancel := context.WithTimeout(clockTimeout, 10*time.Second)
 
-	producers := 4
+	rb := NewRingBuffer[int](
+		ctx,
+		WithSize(defaultRingBufferSize*4),
+	)
+	defer rb.Close()
+	var wg sync.WaitGroup
+
+	producers := 1
+	fmt.Println("producers", producers)
 	elements := 1_000_000
 	var produced uint32 = 0
 	var total uint32 = 0
@@ -51,6 +56,7 @@ func main() {
 	}
 
 	consumers := numCores
+	fmt.Println("consumers", consumers)
 
 	closed := false
 	closer := func() {
@@ -62,6 +68,8 @@ func main() {
 			wg.Done()
 		}
 	}
+
+	var counter uint64
 
 	now := time.Now()
 	// consume
@@ -76,6 +84,7 @@ func main() {
 					wg.Done()
 					return
 				case msgs := <-s:
+					atomic.AddUint64(&counter, 1)
 					atomic.AddUint32(&total, uint32(len(msgs)))
 				}
 			}
@@ -84,10 +93,14 @@ func main() {
 
 	go func() {
 		ticker := time.NewTicker(10 * time.Nanosecond)
+		tickerNorm := time.NewTicker(1 * time.Second / 2)
 		for {
 			select {
 			case <-ticker.C:
 				rb.Tick()
+			case <-tickerNorm.C:
+				fmt.Println("normalize delta", rb.NormalizedDelta())
+				fmt.Println("delta", rb.Delta())
 			case <-ctx.Done():
 				ticker.Stop()
 				closer() // stop everything
@@ -102,9 +115,9 @@ func main() {
 		for {
 			select {
 			case <-ticker.C:
-				fmt.Println("current size", rb.Capacity(), rb.Length())
+				fmt.Println("BEFORE capacity:", rb.Capacity(), " - length", rb.Length())
 				rb.Downsize()
-				fmt.Println("new size", rb.Capacity(), rb.Length())
+				fmt.Println("AFTER capacity:", rb.Capacity(), " - length", rb.Length())
 			case <-ctx.Done():
 				ticker.Stop()
 				return
@@ -112,7 +125,9 @@ func main() {
 		}
 	}()
 
+	fmt.Println("waiting for producers and consumers to finish")
 	wg.Wait()
+	fmt.Println("closing")
 	defer cancel()
 	fmt.Println(
 		"elapsed",
@@ -123,6 +138,7 @@ func main() {
 		formatNumber(atomic.LoadUint32(&total)))
 	rb.Downsize()
 	fmt.Println("final buffer size", rb.Capacity(), rb.Length(), defaultRingBufferSize)
+	fmt.Println("counter", atomic.LoadUint64(&counter))
 }
 
 func formatNumber(num uint32) string {

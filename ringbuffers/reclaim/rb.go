@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"math/rand"
+	"runtime"
 	"sync/atomic"
 	"time"
 )
@@ -70,11 +71,26 @@ type RingBuffer[T any] struct {
 
 	enqueueCount uint64
 	dequeueCount uint64
+
+	backpressureDuration time.Duration
+	backpressureMode     backpressureMode
 }
+
+type backpressureMode string
+
+const (
+	DequeueBackpressure      backpressureMode = "dequeue"
+	EnoughSpaceBackpressure  backpressureMode = "space"
+	DequeueSpaceBackpressure backpressureMode = "dequeue-space"
+	NoBackpressure           backpressureMode = "none"
+)
 
 type ringBufferConfig struct {
 	size      int
 	batchSize int
+
+	backpressureDuration time.Duration
+	backpressureMode     backpressureMode
 }
 
 type Option func(*ringBufferConfig)
@@ -91,21 +107,37 @@ func WithBatchSize(batchSize int) Option {
 	}
 }
 
+func WithBackpressureDuration(duration time.Duration) Option {
+	return func(c *ringBufferConfig) {
+		c.backpressureDuration = duration
+	}
+}
+
+func WithBackpressureMode(mode backpressureMode) Option {
+	return func(c *ringBufferConfig) {
+		c.backpressureMode = mode
+	}
+}
+
 func NewRingBuffer[T any](ctx context.Context, opts ...Option) *RingBuffer[T] {
 	c := ringBufferConfig{
-		size:      defaultRingBufferSize,
-		batchSize: defaultMessageBatchSize,
+		size:                 defaultRingBufferSize,
+		batchSize:            defaultMessageBatchSize,
+		backpressureDuration: 1 * time.Nanosecond,
+		backpressureMode:     DequeueSpaceBackpressure,
 	}
 	for _, opt := range opts {
 		opt(&c)
 	}
 	return &RingBuffer[T]{
-		context:   ctx,
-		buf:       make([]T, c.size),
-		head:      0,
-		batchSize: c.batchSize,
-		tail:      0,
-		entryChan: make(chan []T, c.size/c.batchSize),
+		context:              ctx,
+		buf:                  make([]T, c.size),
+		head:                 0,
+		batchSize:            c.batchSize,
+		tail:                 0,
+		entryChan:            make(chan []T, c.size/c.batchSize),
+		backpressureDuration: c.backpressureDuration,
+		backpressureMode:     c.backpressureMode,
 	}
 }
 
@@ -116,52 +148,56 @@ func (rb *RingBuffer[T]) Close() {
 // Potentially enqueue your messages into the RingBuffer but return a channel that will be closed when the messages are actually enqueued.
 // In order to regulate the rate of messages being enqueued, the function will wait until enough messages have been dequeued before enqueuing the next batch.
 // That waiting behaviour might not be triggered if the buffer got enough space to enqueue all messages.
-// We could have wait and hide the behaviour from the user but we decided to expose it to give more control to the user. Most of your use cases should need to wait.
+// We could have wait and hide the behaviour from the user but I decided to expose it to give more control to the user. Most of your use cases should need to wait.
 func (rb *RingBuffer[T]) Enqueue(msgs []T) <-chan struct{} {
 	done := make(chan struct{})
-	// TODO: we need to change the waiting condition to optimize the write/read
 	go func() {
-		ticker := time.NewTicker(1 * time.Nanosecond)
+		ticker := time.NewTicker(rb.backpressureDuration) // Adjust the ticker interval as needed
+		defer ticker.Stop()
 		for {
 			select {
 			case <-rb.context.Done():
 				done <- struct{}{}
 				close(done)
-				ticker.Stop()
 				return
 			case <-ticker.C:
-				// TODO: optimize this
-				if atomic.LoadUint64(&rb.dequeueCount) >= atomic.LoadUint64(&rb.enqueueCount) {
+				head := atomic.LoadUint64(&rb.head)
+				tail := atomic.LoadUint64(&rb.tail)
+				bufLen := uint64(len(rb.buf))
+
+				// Check if there is enough space in the buffer to enqueue the new messages
+				condition := false
+
+				// I don't know what fit for most for YOUR use case therefore you have control on the type of backpressure you want to apply.
+				// I have a preference for the DequeueBackpressure since I like to have a balance between the producer and the consumer thus more consistency in the processing of the messages.
+				// At least, I can preAck my batch of messages once the channel is done!
+				switch rb.backpressureMode {
+				case DequeueBackpressure:
+					condition = atomic.LoadUint64(&rb.dequeueCount) >= atomic.LoadUint64(&rb.enqueueCount)
+				case EnoughSpaceBackpressure:
+					condition = tail+uint64(len(msgs)) <= head+bufLen
+				case DequeueSpaceBackpressure:
+					condition = tail+uint64(len(msgs)) <= head+bufLen && atomic.LoadUint64(&rb.dequeueCount) >= atomic.LoadUint64(&rb.enqueueCount)
+				case NoBackpressure:
+					condition = true
+				}
+
+				// if tail+uint64(len(msgs)) <= head+bufLen && atomic.LoadUint64(&rb.dequeueCount) >= atomic.LoadUint64(&rb.enqueueCount) {
+				// if tail+uint64(len(msgs)) <= head+bufLen && atomic.LoadUint64(&rb.dequeueCount) >= atomic.LoadUint64(&rb.enqueueCount) {
+				// if tail+uint64(len(msgs)) <= head+bufLen {
+				if condition {
+					rb.entryChan <- msgs
+					atomic.AddUint64(&rb.enqueueCount, uint64(len(msgs)))
 					done <- struct{}{}
 					close(done)
-					ticker.Stop()
 					return
 				}
-				// runtime.Gosched()
+
+				runtime.Gosched() // Yield the CPU to allow other goroutines to run
 			}
 		}
 	}()
-	go func() {
-		<-done
-		rb.entryChan <- msgs
-		atomic.AddUint64(&rb.enqueueCount, uint64(len(msgs)))
-	}()
 	return done
-}
-
-func (rb *RingBuffer[T]) dequeueMany(n int) []T {
-	var msgs []T
-	head := atomic.LoadUint64(&rb.head)
-	tail := atomic.LoadUint64(&rb.tail)
-
-	for i := 0; i < n && tail != head; i++ {
-		msg := rb.buf[head&uint64(len(rb.buf)-1)]
-		msgs = append(msgs, msg)
-		head++
-	}
-	atomic.StoreUint64(&rb.head, head)
-	atomic.AddUint64(&rb.dequeueCount, uint64(len(msgs)))
-	return msgs
 }
 
 func (rb *RingBuffer[T]) Capacity() int {
@@ -197,6 +233,21 @@ func (rb *RingBuffer[T]) Downsize() {
 	atomic.StoreUint32(&rb.downsizeRequested, 1)
 }
 
+func (rb *RingBuffer[T]) NormalizedDelta() float64 {
+	enqueueCount := atomic.LoadUint64(&rb.enqueueCount)
+	dequeueCount := atomic.LoadUint64(&rb.dequeueCount)
+	delta := int64(enqueueCount) - int64(dequeueCount)
+	return float64(delta) / float64(rb.batchSize)
+}
+
+func (rb *RingBuffer[T]) Delta() int64 {
+	enqueueCount := atomic.LoadUint64(&rb.enqueueCount)
+	dequeueCount := atomic.LoadUint64(&rb.dequeueCount)
+	return int64(enqueueCount) - int64(dequeueCount)
+}
+
+// Time is the only way to regulate the rate of messages being enqueued and dequeued. The Tick() method should be called periodically.
+// By empirical testing, I found that a ticking at intervals with a backpressure allows better performance and more consistent processing of the messages.
 func (rb *RingBuffer[T]) Tick() {
 	if atomic.LoadUint32(&rb.downsizing) == 1 || atomic.LoadUint32(&rb.upsizing) == 1 {
 		return
@@ -232,6 +283,21 @@ func (rb *RingBuffer[T]) Tick() {
 			rb.dispatchMessages(msgs)
 		}
 	}
+}
+
+func (rb *RingBuffer[T]) dequeueMany(n int) []T {
+	var msgs []T
+	head := atomic.LoadUint64(&rb.head)
+	tail := atomic.LoadUint64(&rb.tail)
+
+	for i := 0; i < n && tail != head; i++ {
+		msg := rb.buf[head&uint64(len(rb.buf)-1)]
+		msgs = append(msgs, msg)
+		head++
+	}
+	atomic.StoreUint64(&rb.head, head)
+	atomic.AddUint64(&rb.dequeueCount, uint64(len(msgs)))
+	return msgs
 }
 
 func (rb *RingBuffer[T]) resizeBuffer(change int) {
@@ -292,17 +358,4 @@ func (rb *RingBuffer[T]) dispatchMessages(msgs []T) {
 	for i, sub := range rb.subscribers {
 		sub <- msgParts[i]
 	}
-}
-
-func (rb *RingBuffer[T]) NormalizedDelta() float64 {
-	enqueueCount := atomic.LoadUint64(&rb.enqueueCount)
-	dequeueCount := atomic.LoadUint64(&rb.dequeueCount)
-	delta := int64(enqueueCount) - int64(dequeueCount)
-	return float64(delta) / float64(rb.batchSize)
-}
-
-func (rb *RingBuffer[T]) Delta() int64 {
-	enqueueCount := atomic.LoadUint64(&rb.enqueueCount)
-	dequeueCount := atomic.LoadUint64(&rb.dequeueCount)
-	return int64(enqueueCount) - int64(dequeueCount)
 }

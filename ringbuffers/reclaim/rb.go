@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"runtime"
 	"sync/atomic"
 	"time"
 )
 
+/// ComfyRingBuffer?
 ///
 ///	General concept of that RingBuffer:
 ///
@@ -16,7 +18,7 @@ import (
 ///             |                                                        |
 /// +----------------------+      +----------+                           |
 /// |           |          |      |          |                           |
-/// |           |          | +--> |          |                           |
+/// |           |          |      |          |                           |
 /// |           |          |      |          |                           |
 /// +----------------------+      |          |                           |
 ///             |                 |          |                           |
@@ -50,8 +52,9 @@ import (
 /// The developer can request the buffer to be resized by calling the Downsize() method to reduce it's memory footprint.
 
 const (
-	defaultMessageBatchSize = 1024 * 8        // Number of messages to process in a batch
-	defaultRingBufferSize   = 1024 * 1024 * 4 // Size of the ring buffer
+	defaultMessageBatchSize = 1024 * 8 // Number of messages to process in a batch
+	// defaultRingBufferSize   = 1024 * 1024 * 4 // Size of the ring buffer
+	defaultRingBufferSize = 1024 * 1024 * 8 // Size of the ring buffer
 )
 
 type RingBuffer[T any] struct {
@@ -107,6 +110,7 @@ func WithBatchSize(batchSize int) Option {
 	}
 }
 
+// Be warned that a too low backpressure duration might lead to a high CPU usage and prevent the CPU to be used by other goroutines!!
 func WithBackpressureDuration(duration time.Duration) Option {
 	return func(c *ringBufferConfig) {
 		c.backpressureDuration = duration
@@ -149,15 +153,20 @@ func (rb *RingBuffer[T]) Close() {
 // In order to regulate the rate of messages being enqueued, the function will wait until enough messages have been dequeued before enqueuing the next batch.
 // That waiting behaviour might not be triggered if the buffer got enough space to enqueue all messages.
 // We could have wait and hide the behaviour from the user but I decided to expose it to give more control to the user. Most of your use cases should need to wait.
-func (rb *RingBuffer[T]) Enqueue(msgs []T) <-chan struct{} {
-	done := make(chan struct{})
+// TODO: instead of the `<- chan struct` return an error eventually, make it so that we have a context timeout to avoid waiting indefinitely.
+func (rb *RingBuffer[T]) Enqueue(ctx context.Context, msgs []T) <-chan error {
+	done := make(chan error)
 	go func() {
 		ticker := time.NewTicker(rb.backpressureDuration) // Adjust the ticker interval as needed
 		defer ticker.Stop()
 		for {
 			select {
+			case <-ctx.Done():
+				done <- fmt.Errorf("cancelled enqueue operation")
+				close(done)
+				return
 			case <-rb.context.Done():
-				done <- struct{}{}
+				done <- fmt.Errorf("ring buffer is closed")
 				close(done)
 				return
 			case <-ticker.C:
@@ -182,13 +191,10 @@ func (rb *RingBuffer[T]) Enqueue(msgs []T) <-chan struct{} {
 					condition = true
 				}
 
-				// if tail+uint64(len(msgs)) <= head+bufLen && atomic.LoadUint64(&rb.dequeueCount) >= atomic.LoadUint64(&rb.enqueueCount) {
-				// if tail+uint64(len(msgs)) <= head+bufLen && atomic.LoadUint64(&rb.dequeueCount) >= atomic.LoadUint64(&rb.enqueueCount) {
-				// if tail+uint64(len(msgs)) <= head+bufLen {
 				if condition {
 					rb.entryChan <- msgs
 					atomic.AddUint64(&rb.enqueueCount, uint64(len(msgs)))
-					done <- struct{}{}
+					done <- nil
 					close(done)
 					return
 				}

@@ -18,6 +18,16 @@ func main() {
 	numCores := runtime.NumCPU()
 	runtime.GOMAXPROCS(numCores)
 
+	benchmarkMultiRingBuffer(numCores)
+	// benchmarkRingBuffer()
+}
+
+func benchmarkMultiRingBuffer(numCores int) {
+
+}
+
+func benchmarkRingBuffer(numCores int) {
+
 	clockTimeout := context.Background()
 	ctx, cancel := context.WithTimeout(clockTimeout, 10*time.Second)
 

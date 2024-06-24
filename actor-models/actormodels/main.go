@@ -6,7 +6,7 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/davidroman0O/seigyo/playground/actormodels/actors"
+	"experiments/actor-models/actormodels/actors"
 )
 
 /// I want to be able to both prototype any kind of app and be able to grow into a real one with the same tool

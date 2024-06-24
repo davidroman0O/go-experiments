@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"time"
 
-	events "github.com/davidroman0O/seigyo/playground"
+	events "experiments/actor-models/events"
 )
 
 type Something struct {

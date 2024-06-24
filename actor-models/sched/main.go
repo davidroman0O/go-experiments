@@ -1,13 +1,13 @@
 package main
 
 import (
+	"experiments/actor-models/sched/ringbuffer"
 	"fmt"
 	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/davidroman0O/seigyo/playground/sched/ringbuffer"
 	"github.com/enriquebris/goconcurrentqueue"
 )
 

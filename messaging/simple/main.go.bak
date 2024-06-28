@@ -1,0 +1,293 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"sync"
+	"time"
+)
+
+type RuntimeFunc func(ctx context.Context) error
+
+type Metadata struct {
+	Attempts int
+}
+
+type Message struct {
+	Topic    string
+	Payload  interface{}
+	Metadata Metadata
+}
+
+type DeadLetter struct {
+	Recipient string
+	Reason    string
+}
+
+func NewDeadLetter(recipient, reason string) DeadLetter {
+	return DeadLetter{
+		Recipient: recipient,
+		Reason:    reason,
+	}
+}
+
+type runtimeContext struct {
+	shutdown chan struct{}
+	mailbox  chan Message
+}
+
+type Library struct {
+	functions  map[string]RuntimeFunc
+	contexts   map[string]*runtimeContext
+	queues     map[string]chan Message
+	systemChan chan Message
+	buffer     chan Message
+	wg         sync.WaitGroup
+	mu         sync.RWMutex
+}
+
+func NewLibrary() *Library {
+	lib := &Library{
+		functions:  make(map[string]RuntimeFunc),
+		contexts:   make(map[string]*runtimeContext),
+		queues:     make(map[string]chan Message),
+		systemChan: make(chan Message, 100),
+		buffer:     make(chan Message, 1000),
+	}
+	go lib.handleBuffer()
+	go lib.handleSystem()
+	return lib
+}
+
+func (l *Library) handleBuffer() {
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case msg, ok := <-l.buffer:
+			if !ok {
+				return // Library is shutting down
+			}
+			msg.Metadata.Attempts++
+			if msg.Metadata.Attempts < 3 {
+				if msg.Topic == "" {
+					l.Post(msg)
+				} else {
+					l.Put(msg.Topic, msg)
+				}
+			} else {
+				l.PostSystem(Message{
+					Topic: "system",
+					Payload: NewDeadLetter(
+						msg.Topic,
+						fmt.Sprintf("Failed to deliver after %d attempts", msg.Metadata.Attempts),
+					),
+				})
+			}
+		case <-ticker.C:
+			// This case ensures that the select doesn't block indefinitely
+		}
+	}
+}
+
+func (l *Library) handleSystem() {
+	for msg := range l.systemChan {
+		switch payload := msg.Payload.(type) {
+		case DeadLetter:
+			fmt.Printf("Dead letter for %s: %s\n", payload.Recipient, payload.Reason)
+			l.mu.RLock()
+			if ctx, ok := l.contexts[payload.Recipient]; ok {
+				close(ctx.shutdown)
+			}
+			l.mu.RUnlock()
+		default:
+			fmt.Printf("Unknown system message type: %T\n", payload)
+		}
+	}
+}
+
+func (l *Library) Register(name string, fn RuntimeFunc) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.functions[name] = fn
+	l.contexts[name] = &runtimeContext{
+		shutdown: make(chan struct{}),
+		mailbox:  make(chan Message, 100),
+	}
+}
+
+func (l *Library) Run() {
+	for name, fn := range l.functions {
+		l.wg.Add(1)
+		go func(name string, fn RuntimeFunc) {
+			defer l.wg.Done()
+			ctx := context.Background()
+			ctx = context.WithValue(ctx, "library", l)
+			ctx = context.WithValue(ctx, "funcName", name)
+			_ = fn(ctx)
+		}(name, fn)
+	}
+}
+
+func (l *Library) Await() {
+	l.wg.Wait()
+}
+
+func (l *Library) Shutdown() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for name, ctx := range l.contexts {
+		select {
+		case <-ctx.shutdown:
+			// Already closed, do nothing
+		default:
+			close(ctx.shutdown)
+		}
+		delete(l.contexts, name)
+	}
+	l.wg.Wait()
+	close(l.systemChan)
+	close(l.buffer)
+}
+
+func (l *Library) Post(msg Message) {
+	l.mu.RLock()
+	ctx, ok := l.contexts[msg.Topic]
+	l.mu.RUnlock()
+	if !ok {
+		l.PostSystem(Message{
+			Topic:   "system",
+			Payload: NewDeadLetter(msg.Topic, "Recipient not found"),
+		})
+		return
+	}
+	select {
+	case ctx.mailbox <- msg:
+	default:
+		l.buffer <- msg
+	}
+}
+
+func (l *Library) Put(topic string, msg Message) {
+	l.mu.Lock()
+	if _, ok := l.queues[topic]; !ok {
+		l.queues[topic] = make(chan Message, 100)
+	}
+	queue := l.queues[topic]
+	l.mu.Unlock()
+
+	select {
+	case queue <- msg:
+	default:
+		l.buffer <- msg
+	}
+}
+
+func (l *Library) PostSystem(msg Message) {
+	l.systemChan <- msg
+}
+
+func UseMailbox(ctx context.Context) <-chan Message {
+	lib := ctx.Value("library").(*Library)
+	name := ctx.Value("funcName").(string)
+	return lib.contexts[name].mailbox
+}
+
+func UseQueue(ctx context.Context, topic string) <-chan Message {
+	lib := ctx.Value("library").(*Library)
+	lib.mu.Lock()
+	defer lib.mu.Unlock()
+	if _, ok := lib.queues[topic]; !ok {
+		lib.queues[topic] = make(chan Message, 100)
+	}
+	return lib.queues[topic]
+}
+
+func UseShutdown(ctx context.Context) <-chan struct{} {
+	lib := ctx.Value("library").(*Library)
+	name := ctx.Value("funcName").(string)
+	return lib.contexts[name].shutdown
+}
+
+func UseSystem(ctx context.Context) func(Message) {
+	return ctx.Value("library").(*Library).PostSystem
+}
+
+func Post(ctx context.Context, msg Message) {
+	ctx.Value("library").(*Library).Post(msg)
+}
+
+func Put(ctx context.Context, topic string, msg Message) {
+	ctx.Value("library").(*Library).Put(topic, msg)
+}
+
+func pingFunc(ctx context.Context) error {
+	fmt.Println("Ping started")
+	mailbox := UseMailbox(ctx)
+	shutdown := UseShutdown(ctx)
+	postSystem := UseSystem(ctx)
+
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			Put(ctx, "ping-pong-queue", Message{Payload: "ping"})
+		case msg := <-mailbox:
+			if msg.Payload == "pong" {
+				fmt.Println("Ping received pong")
+			}
+		case <-shutdown:
+			fmt.Println("Ping shutting down")
+			postSystem(Message{
+				Topic:   "system",
+				Payload: NewDeadLetter("pong", "Ping is shutting down"),
+			})
+			return nil
+		}
+	}
+}
+
+func pongFunc(ctx context.Context) error {
+	fmt.Println("Pong started")
+	shutdown := UseShutdown(ctx)
+	queue := UseQueue(ctx, "ping-pong-queue")
+
+	for {
+		select {
+		case msg := <-queue:
+			if msg.Payload == "ping" {
+				fmt.Println("Pong received ping")
+				Post(ctx, Message{Topic: "ping", Payload: "pong"})
+			}
+		case <-shutdown:
+			fmt.Println("Pong shutting down")
+			return nil
+		}
+	}
+}
+
+func main() {
+	lib := NewLibrary()
+
+	lib.Register("ping", pingFunc)
+	lib.Register("pong", pongFunc)
+
+	lib.Run()
+
+	// Goroutine to send a dead letter after 150 milliseconds
+	go func() {
+		time.Sleep(150 * time.Millisecond)
+		fmt.Println("Sending dead letter")
+		lib.PostSystem(Message{
+			Topic:   "system",
+			Payload: NewDeadLetter("ping", "Test dead letter"),
+		})
+	}()
+
+	lib.Await()
+	lib.Shutdown()
+	fmt.Println("Main function exiting")
+}

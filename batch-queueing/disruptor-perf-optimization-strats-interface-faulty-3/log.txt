@@ -1,0 +1,572 @@
+Running test: BusySpinWaitStrategy (1 consumer) (MultiConsume: false, BatchPublish: true)
+Test BusySpinWaitStrategy (1 consumer) completed, waiting for goroutines to finish...
+Producer finished, produced: 3888087040
+Timed out waiting for goroutines to finish
+  Produced: 3888087040
+  Consumed: 553049907
+  Last Produced Sequence: 3888087039
+  Last Consumed Sequence: 553049906
+  Cursor: 3888087038
+  Producer Stalls: 474620
+  Consumer Stalls: 52414
+  Max Batch Size: 8192
+  Total Batches: 67511
+  Throughput: 242.22 million ops/sec
+  Consumption duration: 15.002204459s
+  Total duration: 16.052159708s
+
+Running test: BusySpinWaitStrategy (1 consumer) (MultiConsume: true, BatchPublish: true)
+Consumer 0 exiting due to context cancellation
+Test BusySpinWaitStrategy (1 consumer) completed, waiting for goroutines to finish...
+Producer finished, produced: 3903913984
+Timed out waiting for goroutines to finish
+  Produced: 3903913984
+  Consumed: 744185855
+  Last Produced Sequence: 3903913983
+  Last Consumed Sequence: 744189806
+  Cursor: 3903913982
+  Producer Stalls: 476552
+  Consumer Stalls: 0
+  Max Batch Size: 8192
+  Total Batches: 90843
+  Throughput: 242.68 million ops/sec
+  Consumption duration: 15.002117959s
+  Total duration: 16.086933875s
+
+Running test: BusySpinWaitStrategy (1 consumer) (MultiConsume: false, BatchPublish: false)
+Producer finished, produced: 503366892
+Test BusySpinWaitStrategy (1 consumer) completed, waiting for goroutines to finish...
+Timed out waiting for goroutines to finish
+  Produced: 503366892
+  Consumed: 452771841
+  Last Produced Sequence: -1
+  Last Consumed Sequence: 0
+  Cursor: -1
+  Producer Stalls: 0
+  Consumer Stalls: 0
+  Max Batch Size: 1
+  Total Batches: 1
+  Throughput: 31.28 million ops/sec
+  Consumption duration: 15.000101s
+  Total duration: 16.094447166s
+
+Running test: BusySpinWaitStrategy (1 consumer) (MultiConsume: true, BatchPublish: false)
+Producer finished, produced: 643242956
+Test BusySpinWaitStrategy (1 consumer) completed, waiting for goroutines to finish...
+Timed out waiting for goroutines to finish
+  Produced: 643242956
+  Consumed: 988749825
+  Last Produced Sequence: -1
+  Last Consumed Sequence: 0
+  Cursor: -1
+  Producer Stalls: 0
+  Consumer Stalls: 0
+  Max Batch Size: 1
+  Total Batches: 1
+  WARNING: Consumed count exceeds Produced count by 345506869
+  Throughput: 40.02 million ops/sec
+  Consumption duration: 15.000075s
+  Total duration: 16.07185075s
+
+Running test: BusySpinWaitStrategy (2 consumers) (MultiConsume: false, BatchPublish: true)
+Test BusySpinWaitStrategy (2 consumers) completed, waiting for goroutines to finish...
+Producer finished, produced: 3507576832
+Timed out waiting for goroutines to finish
+  Produced: 3507576832
+  Consumed: 906886415
+  Last Produced Sequence: 3507576831
+  Last Consumed Sequence: 195845168
+  Cursor: 3507576830
+  Producer Stalls: 428171
+  Consumer Stalls: 142729
+  Max Batch Size: 8192
+  Total Batches: 47504
+  Throughput: 217.78 million ops/sec
+  Consumption duration: 15.000088459s
+  Total duration: 16.10574975s
+
+Running test: BusySpinWaitStrategy (2 consumers) (MultiConsume: true, BatchPublish: true)
+Consumer 1 exiting due to context cancellation
+Consumer 0 exiting due to context cancellation
+Test BusySpinWaitStrategy (2 consumers) completed, waiting for goroutines to finish...
+Producer finished, produced: 3324116992
+Consumer 0 exiting due to context cancellation
+Consumer 0 exiting due to context cancellation
+Consumer 1 exiting due to context cancellation
+All goroutines finished normally
+  Produced: 3324116992
+  Consumed: 892329982
+  Last Produced Sequence: 3324116991
+  Last Consumed Sequence: 179716094
+  Cursor: 3324116990
+  Producer Stalls: 405776
+  Consumer Stalls: 0
+  Max Batch Size: 8192
+  Total Batches: 43876
+  Throughput: 254.52 million ops/sec
+  Consumption duration: 11.942364208s
+  Total duration: 13.060246375s
+
+Running test: BusySpinWaitStrategy (2 consumers) (MultiConsume: false, BatchPublish: false)
+Producer finished, produced: 608210566
+Test BusySpinWaitStrategy (2 consumers) completed, waiting for goroutines to finish...
+Timed out waiting for goroutines to finish
+  Produced: 608210566
+  Consumed: 1
+  Last Produced Sequence: -1
+  Last Consumed Sequence: 0
+  Cursor: -1
+  Producer Stalls: 0
+  Consumer Stalls: 1
+  Max Batch Size: 1
+  Total Batches: 1
+  Throughput: 37.82 million ops/sec
+  Consumption duration: 15.000099209s
+  Total duration: 16.082761958s
+
+Running test: BusySpinWaitStrategy (2 consumers) (MultiConsume: true, BatchPublish: false)
+Test BusySpinWaitStrategy (2 consumers) completed, waiting for goroutines to finish...
+Producer finished, produced: 601008284
+Timed out waiting for goroutines to finish
+  Produced: 601008284
+  Consumed: 2
+  Last Produced Sequence: -1
+  Last Consumed Sequence: 0
+  Cursor: -1
+  Producer Stalls: 0
+  Consumer Stalls: 0
+  Max Batch Size: 1
+  Total Batches: 2
+  Throughput: 37.39 million ops/sec
+  Consumption duration: 15.001979083s
+  Total duration: 16.073626042s
+
+Running test: YieldingWaitStrategy (1 consumer) (MultiConsume: false, BatchPublish: true)
+Test YieldingWaitStrategy (1 consumer) completed, waiting for goroutines to finish...
+Producer finished, produced: 637370368
+Consumer 0 exiting due to context cancellation
+All goroutines finished normally
+  Produced: 637370368
+  Consumed: 447809284
+  Last Produced Sequence: 637370367
+  Last Consumed Sequence: 447810147
+  Cursor: 637370366
+  Producer Stalls: 77804
+  Consumer Stalls: 15623
+  Max Batch Size: 8192
+  Total Batches: 54665
+  Throughput: 52.04 million ops/sec
+  Consumption duration: 11.148604708s
+  Total duration: 12.246596792s
+
+Running test: YieldingWaitStrategy (1 consumer) (MultiConsume: true, BatchPublish: true)
+Test YieldingWaitStrategy (1 consumer) completed, waiting for goroutines to finish...
+Producer finished, produced: 642555904
+Consumer 0 exiting due to context cancellation
+All goroutines finished normally
+  Produced: 642555904
+  Consumed: 640065535
+  Last Produced Sequence: 642555903
+  Last Consumed Sequence: 640065534
+  Cursor: 642555902
+  Producer Stalls: 78437
+  Consumer Stalls: 0
+  Max Batch Size: 8192
+  Total Batches: 78133
+  Throughput: 56.55 million ops/sec
+  Consumption duration: 10.025610167s
+  Total duration: 11.362211959s
+
+Running test: YieldingWaitStrategy (1 consumer) (MultiConsume: false, BatchPublish: false)
+Test YieldingWaitStrategy (1 consumer) completed, waiting for goroutines to finish...
+Producer finished, produced: 651255475
+Timed out waiting for goroutines to finish
+  Produced: 651255475
+  Consumed: 1
+  Last Produced Sequence: -1
+  Last Consumed Sequence: 0
+  Cursor: -1
+  Producer Stalls: 0
+  Consumer Stalls: 0
+  Max Batch Size: 1
+  Total Batches: 1
+  Throughput: 40.39 million ops/sec
+  Consumption duration: 15.00006875s
+  Total duration: 16.124917292s
+
+Running test: YieldingWaitStrategy (1 consumer) (MultiConsume: true, BatchPublish: false)
+Test YieldingWaitStrategy (1 consumer) completed, waiting for goroutines to finish...
+Producer finished, produced: 654225204
+Timed out waiting for goroutines to finish
+  Produced: 654225204
+  Consumed: 1
+  Last Produced Sequence: -1
+  Last Consumed Sequence: 0
+  Cursor: -1
+  Producer Stalls: 0
+  Consumer Stalls: 0
+  Max Batch Size: 1
+  Total Batches: 1
+  Throughput: 40.29 million ops/sec
+  Consumption duration: 15.000103875s
+  Total duration: 16.237153833s
+
+Running test: YieldingWaitStrategy (2 consumers) (MultiConsume: false, BatchPublish: true)
+Test YieldingWaitStrategy (2 consumers) completed, waiting for goroutines to finish...
+Producer finished, produced: 517259264
+Consumer 0 exiting due to context cancellation
+Consumer 1 exiting due to context cancellation
+All goroutines finished normally
+  Produced: 517259264
+  Consumed: 292512319
+  Last Produced Sequence: 517259263
+  Last Consumed Sequence: 292511742
+  Cursor: 517259262
+  Producer Stalls: 63142
+  Consumer Stalls: 396
+  Max Batch Size: 8192
+  Total Batches: 71018
+  Throughput: 39.08 million ops/sec
+  Consumption duration: 11.977297s
+  Total duration: 13.234630708s
+
+Running test: YieldingWaitStrategy (2 consumers) (MultiConsume: true, BatchPublish: true)
+Test YieldingWaitStrategy (2 consumers) completed, waiting for goroutines to finish...
+Producer finished, produced: 500645888
+Consumer 1 exiting due to context cancellation
+Consumer 0 exiting due to context cancellation
+All goroutines finished normally
+  Produced: 500645888
+  Consumed: 784097278
+  Last Produced Sequence: 500645887
+  Last Consumed Sequence: 392380414
+  Cursor: 500645886
+  Producer Stalls: 61114
+  Consumer Stalls: 0
+  Max Batch Size: 8192
+  Total Batches: 95715
+  WARNING: Consumed count exceeds Produced count by 283451390
+  Throughput: 37.65 million ops/sec
+  Consumption duration: 12.025819916s
+  Total duration: 13.297296834s
+
+Running test: YieldingWaitStrategy (2 consumers) (MultiConsume: false, BatchPublish: false)
+Producer finished, produced: 613507237
+Test YieldingWaitStrategy (2 consumers) completed, waiting for goroutines to finish...
+Timed out waiting for goroutines to finish
+  Produced: 613507237
+  Consumed: 1
+  Last Produced Sequence: -1
+  Last Consumed Sequence: 0
+  Cursor: -1
+  Producer Stalls: 0
+  Consumer Stalls: 1
+  Max Batch Size: 1
+  Total Batches: 1
+  Throughput: 37.47 million ops/sec
+  Consumption duration: 15.000106666s
+  Total duration: 16.375215458s
+
+Running test: YieldingWaitStrategy (2 consumers) (MultiConsume: true, BatchPublish: false)
+Test YieldingWaitStrategy (2 consumers) completed, waiting for goroutines to finish...
+Producer finished, produced: 649812130
+Timed out waiting for goroutines to finish
+  Produced: 649812130
+  Consumed: 2
+  Last Produced Sequence: -1
+  Last Consumed Sequence: 0
+  Cursor: -1
+  Producer Stalls: 0
+  Consumer Stalls: 0
+  Max Batch Size: 1
+  Total Batches: 2
+  Throughput: 40.21 million ops/sec
+  Consumption duration: 15.016352792s
+  Total duration: 16.160425292s
+
+Running test: SleepingWaitStrategy (1 consumer) (MultiConsume: false, BatchPublish: true)
+Test SleepingWaitStrategy (1 consumer) completed, waiting for goroutines to finish...
+Producer finished, produced: 333537280
+Consumer 0 exiting due to context cancellation
+All goroutines finished normally
+  Produced: 333537280
+  Consumed: 333529087
+  Last Produced Sequence: 333537279
+  Last Consumed Sequence: 333529086
+  Cursor: 333537278
+  Producer Stalls: 40715
+  Consumer Stalls: 0
+  Max Batch Size: 8192
+  Total Batches: 40714
+  Throughput: 29.92 million ops/sec
+  Consumption duration: 10.000930167s
+  Total duration: 11.147704417s
+
+Running test: SleepingWaitStrategy (1 consumer) (MultiConsume: true, BatchPublish: true)
+Test SleepingWaitStrategy (1 consumer) completed, waiting for goroutines to finish...
+Producer finished, produced: 357048320
+Consumer 0 exiting due to context cancellation
+All goroutines finished normally
+  Produced: 357048320
+  Consumed: 357048319
+  Last Produced Sequence: 357048319
+  Last Consumed Sequence: 357048318
+  Cursor: 357048318
+  Producer Stalls: 43585
+  Consumer Stalls: 0
+  Max Batch Size: 8192
+  Total Batches: 43585
+  Throughput: 31.97 million ops/sec
+  Consumption duration: 10.000517833s
+  Total duration: 11.169018125s
+
+Running test: SleepingWaitStrategy (1 consumer) (MultiConsume: false, BatchPublish: false)
+Producer finished, produced: 687343091
+Test SleepingWaitStrategy (1 consumer) completed, waiting for goroutines to finish...
+Timed out waiting for goroutines to finish
+  Produced: 687343091
+  Consumed: 1
+  Last Produced Sequence: -1
+  Last Consumed Sequence: 0
+  Cursor: -1
+  Producer Stalls: 0
+  Consumer Stalls: 0
+  Max Batch Size: 1
+  Total Batches: 1
+  Throughput: 42.17 million ops/sec
+  Consumption duration: 15.000168334s
+  Total duration: 16.298650417s
+
+Running test: SleepingWaitStrategy (1 consumer) (MultiConsume: true, BatchPublish: false)
+Producer finished, produced: 686079731
+Test SleepingWaitStrategy (1 consumer) completed, waiting for goroutines to finish...
+Timed out waiting for goroutines to finish
+  Produced: 686079731
+  Consumed: 1
+  Last Produced Sequence: -1
+  Last Consumed Sequence: 0
+  Cursor: -1
+  Producer Stalls: 0
+  Consumer Stalls: 0
+  Max Batch Size: 1
+  Total Batches: 1
+  Throughput: 42.01 million ops/sec
+  Consumption duration: 15.000076208s
+  Total duration: 16.330117791s
+
+Running test: SleepingWaitStrategy (2 consumers) (MultiConsume: false, BatchPublish: true)
+Test SleepingWaitStrategy (2 consumers) completed, waiting for goroutines to finish...
+Producer finished, produced: 324362240
+Consumer 1 exiting due to context cancellation
+Consumer 0 exiting due to context cancellation
+All goroutines finished normally
+  Produced: 324362240
+  Consumed: 257253418
+  Last Produced Sequence: 324362239
+  Last Consumed Sequence: 257253374
+  Cursor: 324362238
+  Producer Stalls: 39595
+  Consumer Stalls: 9994
+  Max Batch Size: 8192
+  Total Batches: 62616
+  Throughput: 26.62 million ops/sec
+  Consumption duration: 10.870061125s
+  Total duration: 12.182742333s
+
+Running test: SleepingWaitStrategy (2 consumers) (MultiConsume: true, BatchPublish: true)
+Test SleepingWaitStrategy (2 consumers) completed, waiting for goroutines to finish...
+Producer finished, produced: 317235200
+Consumer 0 exiting due to context cancellation
+Consumer 1 exiting due to context cancellation
+All goroutines finished normally
+  Produced: 317235200
+  Consumed: 634388478
+  Last Produced Sequence: 317235199
+  Last Consumed Sequence: 317194238
+  Cursor: 317235198
+  Producer Stalls: 38725
+  Consumer Stalls: 0
+  Max Batch Size: 8192
+  Total Batches: 77440
+  WARNING: Consumed count exceeds Produced count by 317153278
+  Throughput: 25.55 million ops/sec
+  Consumption duration: 10.00063125s
+  Total duration: 12.41702525s
+
+Running test: SleepingWaitStrategy (2 consumers) (MultiConsume: false, BatchPublish: false)
+Test SleepingWaitStrategy (2 consumers) completed, waiting for goroutines to finish...
+Producer finished, produced: 652089282
+Timed out waiting for goroutines to finish
+  Produced: 652089282
+  Consumed: 1
+  Last Produced Sequence: -1
+  Last Consumed Sequence: 0
+  Cursor: -1
+  Producer Stalls: 0
+  Consumer Stalls: 1
+  Max Batch Size: 1
+  Total Batches: 1
+  Throughput: 39.76 million ops/sec
+  Consumption duration: 15.000061291s
+  Total duration: 16.402480083s
+
+Running test: SleepingWaitStrategy (2 consumers) (MultiConsume: true, BatchPublish: false)
+Producer finished, produced: 698667930
+Test SleepingWaitStrategy (2 consumers) completed, waiting for goroutines to finish...
+Timed out waiting for goroutines to finish
+  Produced: 698667930
+  Consumed: 2
+  Last Produced Sequence: -1
+  Last Consumed Sequence: 0
+  Cursor: -1
+  Producer Stalls: 0
+  Consumer Stalls: 0
+  Max Batch Size: 1
+  Total Batches: 2
+  Throughput: 42.73 million ops/sec
+  Consumption duration: 15.000068167s
+  Total duration: 16.349628292s
+
+Running test: BlockingWaitStrategy (1 consumer) (MultiConsume: false, BatchPublish: true)
+Producer finished, produced: 3806748672
+Test BlockingWaitStrategy (1 consumer) completed, waiting for goroutines to finish...
+Consumer 0 exiting due to context cancellation
+All goroutines finished normally
+  Produced: 3806748672
+  Consumed: 535511039
+  Last Produced Sequence: 3806748671
+  Last Consumed Sequence: 535511038
+  Cursor: 3806748670
+  Producer Stalls: 464691
+  Consumer Stalls: 0
+  Max Batch Size: 8192
+  Total Batches: 65370
+  Throughput: 300.68 million ops/sec
+  Consumption duration: 11.365024625s
+  Total duration: 12.66062775s
+
+Running test: BlockingWaitStrategy (1 consumer) (MultiConsume: true, BatchPublish: true)
+Producer finished, produced: 3759177728
+Test BlockingWaitStrategy (1 consumer) completed, waiting for goroutines to finish...
+Timed out waiting for goroutines to finish
+  Produced: 3759177728
+  Consumed: 950894591
+  Last Produced Sequence: 3759177727
+  Last Consumed Sequence: 950895661
+  Cursor: 3759177726
+  Producer Stalls: 458884
+  Consumer Stalls: 0
+  Max Batch Size: 8192
+  Total Batches: 116076
+  Throughput: 231.61 million ops/sec
+  Consumption duration: 15.005600084s
+  Total duration: 16.230929625s
+
+Running test: BlockingWaitStrategy (1 consumer) (MultiConsume: false, BatchPublish: false)
+Test BlockingWaitStrategy (1 consumer) completed, waiting for goroutines to finish...
+Producer finished, produced: 643409505
+Timed out waiting for goroutines to finish
+  Produced: 643409505
+  Consumed: 1089994753
+  Last Produced Sequence: -1
+  Last Consumed Sequence: 0
+  Cursor: -1
+  Producer Stalls: 0
+  Consumer Stalls: 0
+  Max Batch Size: 1
+  Total Batches: 1
+  WARNING: Consumed count exceeds Produced count by 446585248
+  Throughput: 39.55 million ops/sec
+  Consumption duration: 15.000095709s
+  Total duration: 16.268318375s
+
+Running test: BlockingWaitStrategy (1 consumer) (MultiConsume: true, BatchPublish: false)
+Consumer 0 exiting due to context cancellation
+Producer finished, produced: 627068908
+Test BlockingWaitStrategy (1 consumer) completed, waiting for goroutines to finish...
+Timed out waiting for goroutines to finish
+  Produced: 627068908
+  Consumed: 319307777
+  Last Produced Sequence: -1
+  Last Consumed Sequence: 0
+  Cursor: -1
+  Producer Stalls: 0
+  Consumer Stalls: 0
+  Max Batch Size: 1
+  Total Batches: 1
+  Throughput: 38.57 million ops/sec
+  Consumption duration: 15.005141542s
+  Total duration: 16.2584825s
+
+Running test: BlockingWaitStrategy (2 consumers) (MultiConsume: false, BatchPublish: true)
+Test BlockingWaitStrategy (2 consumers) completed, waiting for goroutines to finish...
+Producer finished, produced: 3535937536
+Consumer 1 exiting due to context cancellation
+Timed out waiting for goroutines to finish
+  Produced: 3535937536
+  Consumed: 224820521
+  Last Produced Sequence: 3535937535
+  Last Consumed Sequence: 224820069
+  Cursor: 3535937534
+  Producer Stalls: 431633
+  Consumer Stalls: 111898
+  Max Batch Size: 8192
+  Total Batches: 53814
+  Throughput: 216.87 million ops/sec
+  Consumption duration: 15.009029625s
+  Total duration: 16.304804875s
+
+Running test: BlockingWaitStrategy (2 consumers) (MultiConsume: true, BatchPublish: true)
+Consumer 0 exiting due to context cancellation
+Test BlockingWaitStrategy (2 consumers) completed, waiting for goroutines to finish...
+Producer finished, produced: 3151683584
+Timed out waiting for goroutines to finish
+  Produced: 3151683584
+  Consumed: 687751166
+  Last Produced Sequence: 3151683583
+  Last Consumed Sequence: 343878878
+  Cursor: 3151683582
+  Producer Stalls: 384727
+  Consumer Stalls: 0
+  Max Batch Size: 8192
+  Total Batches: 83954
+  Throughput: 189.62 million ops/sec
+  Consumption duration: 15.00682925s
+  Total duration: 16.620962667s
+
+Running test: BlockingWaitStrategy (2 consumers) (MultiConsume: false, BatchPublish: false)
+Test BlockingWaitStrategy (2 consumers) completed, waiting for goroutines to finish...
+Producer finished, produced: 657789021
+Consumer 1 exiting due to context cancellation
+Consumer 0 exiting due to context cancellation
+Timed out waiting for goroutines to finish
+  Produced: 657789021
+  Consumed: 1068843009
+  Last Produced Sequence: -1
+  Last Consumed Sequence: 0
+  Cursor: -1
+  Producer Stalls: 0
+  Consumer Stalls: 1
+  Max Batch Size: 1
+  Total Batches: 1
+  WARNING: Consumed count exceeds Produced count by 411053988
+  Throughput: 40.90 million ops/sec
+  Consumption duration: 15.008890834s
+  Total duration: 16.083270375s
+
+Running test: BlockingWaitStrategy (2 consumers) (MultiConsume: true, BatchPublish: false)
+Test BlockingWaitStrategy (2 consumers) completed, waiting for goroutines to finish...
+Producer finished, produced: 620382868
+Timed out waiting for goroutines to finish
+  Produced: 620382868
+  Consumed: 2
+  Last Produced Sequence: -1
+  Last Consumed Sequence: 0
+  Cursor: -1
+  Producer Stalls: 0
+  Consumer Stalls: 0
+  Max Batch Size: 1
+  Total Batches: 2
+  Throughput: 38.13 million ops/sec
+  Consumption duration: 15.00761025s
+  Total duration: 16.269319958s

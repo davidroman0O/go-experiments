@@ -1,0 +1,316 @@
+Running test: BusySpinWaitStrategy (1 consumer) (MultiConsume: false, BatchPublish: true)
+Test BusySpinWaitStrategy (1 consumer) completed, waiting for producer to finish...
+Producer finished, produced: 2702245888
+Producer finished, waiting for consumers to finish...
+Consumer 0 exiting due to context cancellation
+  Produced: 2702245888
+  Consumed: 548281497
+  Last Produced Sequence: 2702245887
+  Last Consumed Sequence: 548281496
+  Cursor: 2702245886
+  Producer Stalls: 329864
+  Consumer Stalls: 98562
+  Max Batch Size: 8192
+  Total Batches: 66929
+  Min Consumed Sequence: 0
+  Throughput: 270224588.80 million ops/sec
+
+  Last consumption duration: 6.012176833s
+  Total duration: 17.153025917s
+Running test: BusySpinWaitStrategy (1 consumer) (MultiConsume: true, BatchPublish: true)
+Test BusySpinWaitStrategy (1 consumer) completed, waiting for producer to finish...
+Producer finished, produced: 2856919040
+Producer finished, waiting for consumers to finish...
+Consumer 0 exiting due to context cancellation
+  Produced: 2856919040
+  Consumed: 2051784703
+  Last Produced Sequence: 2856919039
+  Last Consumed Sequence: 2051784702
+  Cursor: 2856919038
+  Producer Stalls: 348745
+  Consumer Stalls: 0
+  Max Batch Size: 8192
+  Total Batches: 250462
+  Min Consumed Sequence: -1
+  Throughput: 285691904.00 million ops/sec
+
+  Last consumption duration: 1m7.164743375s
+  Total duration: 1m18.320484333s
+Running test: BusySpinWaitStrategy (2 consumers) (MultiConsume: false, BatchPublish: true)
+Test BusySpinWaitStrategy (2 consumers) completed, waiting for producer to finish...
+Producer finished, produced: 1497907200
+Producer finished, waiting for consumers to finish...
+Consumer 0 exiting due to context cancellation
+Consumer 0 exiting due to context cancellation
+  Produced: 1497907200
+  Consumed: 401594990
+  Last Produced Sequence: 1497907199
+  Last Consumed Sequence: 389066740
+  Cursor: 1497907198
+  Producer Stalls: 182850
+  Consumer Stalls: 116389
+  Max Batch Size: 8192
+  Total Batches: 67429
+  Min Consumed Sequence: 0
+  Throughput: 149790720.00 million ops/sec
+
+  Last consumption duration: 5.042226084s
+  Total duration: 16.117646875s
+Running test: BusySpinWaitStrategy (2 consumers) (MultiConsume: true, BatchPublish: true)
+Test BusySpinWaitStrategy (2 consumers) completed, waiting for producer to finish...
+Producer finished, produced: 1607057408
+Producer finished, waiting for consumers to finish...
+Consumer 0 exiting due to context cancellation
+Consumer 0 exiting due to context cancellation
+  Produced: 1607057408
+  Consumed: 2307203070
+  Last Produced Sequence: 1607057407
+  Last Consumed Sequence: 1355661310
+  Cursor: 1607057406
+  Producer Stalls: 196174
+  Consumer Stalls: 0
+  Max Batch Size: 8192
+  Total Batches: 281641
+  Min Consumed Sequence: -1
+  WARNING: Consumed count exceeds Produced count by 700145662
+  Throughput: 160705740.80 million ops/sec
+
+  Last consumption duration: 36.104185708s
+  Total duration: 47.172108917s
+Running test: YieldingWaitStrategy (1 consumer) (MultiConsume: false, BatchPublish: true)
+Test YieldingWaitStrategy (1 consumer) completed, waiting for producer to finish...
+Producer finished, produced: 2255052800
+Producer finished, waiting for consumers to finish...
+Consumer 0 exiting due to context cancellation
+  Produced: 2255052800
+  Consumed: 533080403
+  Last Produced Sequence: 2255052799
+  Last Consumed Sequence: 533080402
+  Cursor: 2255052798
+  Producer Stalls: 275275
+  Consumer Stalls: 2953
+  Max Batch Size: 8192
+  Total Batches: 65074
+  Min Consumed Sequence: 0
+  Throughput: 225505280.00 million ops/sec
+
+  Last consumption duration: 3.852217458s
+  Total duration: 14.906795208s
+Running test: YieldingWaitStrategy (1 consumer) (MultiConsume: true, BatchPublish: true)
+Test YieldingWaitStrategy (1 consumer) completed, waiting for producer to finish...
+Producer finished, produced: 2254348288
+Producer finished, waiting for consumers to finish...
+Consumer 0 exiting due to context cancellation
+  Produced: 2254348288
+  Consumed: 992362495
+  Last Produced Sequence: 2254348287
+  Last Consumed Sequence: 992362494
+  Cursor: 2254348286
+  Producer Stalls: 275189
+  Consumer Stalls: 0
+  Max Batch Size: 8192
+  Total Batches: 121138
+  Min Consumed Sequence: -1
+  Throughput: 225434828.80 million ops/sec
+
+  Last consumption duration: 11.844225792s
+  Total duration: 22.92206125s
+Running test: YieldingWaitStrategy (2 consumers) (MultiConsume: false, BatchPublish: true)
+Test YieldingWaitStrategy (2 consumers) completed, waiting for producer to finish...
+Producer finished, produced: 211804160
+Producer finished, waiting for consumers to finish...
+Consumer 0 exiting due to context cancellation
+Consumer 0 exiting due to context cancellation
+  Produced: 211804160
+  Consumed: 211804159
+  Last Produced Sequence: 211804159
+  Last Consumed Sequence: 211804158
+  Cursor: 211804158
+  Producer Stalls: 25855
+  Consumer Stalls: 5886
+  Max Batch Size: 8192
+  Total Batches: 45824
+  Min Consumed Sequence: 0
+  Throughput: 21180416.00 million ops/sec
+
+  Last consumption duration: 24.354167ms
+  Total duration: 11.185686708s
+Running test: YieldingWaitStrategy (2 consumers) (MultiConsume: true, BatchPublish: true)
+Test YieldingWaitStrategy (2 consumers) completed, waiting for producer to finish...
+Producer finished, produced: 380624896
+Producer finished, waiting for consumers to finish...
+Consumer 0 exiting due to context cancellation
+Consumer 0 exiting due to context cancellation
+  Produced: 380624896
+  Consumed: 761249790
+  Last Produced Sequence: 380624895
+  Last Consumed Sequence: 380624894
+  Cursor: 380624894
+  Producer Stalls: 46463
+  Consumer Stalls: 0
+  Max Batch Size: 8192
+  Total Batches: 92926
+  Min Consumed Sequence: -1
+  WARNING: Consumed count exceeds Produced count by 380624894
+  Throughput: 38062489.60 million ops/sec
+
+  Last consumption duration: 24.136292ms
+  Total duration: 11.104697959s
+Running test: SleepingWaitStrategy (1 consumer) (MultiConsume: false, BatchPublish: true)
+Test SleepingWaitStrategy (1 consumer) completed, waiting for producer to finish...
+Producer finished, produced: 2284396544
+Producer finished, waiting for consumers to finish...
+Consumer 0 exiting due to context cancellation
+  Produced: 2284396544
+  Consumed: 539566079
+  Last Produced Sequence: 2284396543
+  Last Consumed Sequence: 539566078
+  Cursor: 2284396542
+  Producer Stalls: 278857
+  Consumer Stalls: 81811
+  Max Batch Size: 8192
+  Total Batches: 65865
+  Min Consumed Sequence: 0
+  Throughput: 228439654.40 million ops/sec
+
+  Last consumption duration: 5.81698875s
+  Total duration: 16.875502s
+Running test: SleepingWaitStrategy (1 consumer) (MultiConsume: true, BatchPublish: true)
+Test SleepingWaitStrategy (1 consumer) completed, waiting for producer to finish...
+Producer finished, produced: 2292383744
+Producer finished, waiting for consumers to finish...
+Consumer 0 exiting due to context cancellation
+  Produced: 2292383744
+  Consumed: 1025056767
+  Last Produced Sequence: 2292383743
+  Last Consumed Sequence: 1025056766
+  Cursor: 2292383742
+  Producer Stalls: 279832
+  Consumer Stalls: 0
+  Max Batch Size: 8192
+  Total Batches: 125129
+  Min Consumed Sequence: -1
+  Throughput: 229238374.40 million ops/sec
+
+  Last consumption duration: 10.787720084s
+  Total duration: 21.838650708s
+Running test: SleepingWaitStrategy (2 consumers) (MultiConsume: false, BatchPublish: true)
+Test SleepingWaitStrategy (2 consumers) completed, waiting for producer to finish...
+Producer finished, produced: 214999040
+Producer finished, waiting for consumers to finish...
+Consumer 0 exiting due to context cancellation
+Consumer 0 exiting due to context cancellation
+  Produced: 214999040
+  Consumed: 214999039
+  Last Produced Sequence: 214999039
+  Last Consumed Sequence: 214999038
+  Cursor: 214999038
+  Producer Stalls: 26245
+  Consumer Stalls: 5741
+  Max Batch Size: 8192
+  Total Batches: 46749
+  Min Consumed Sequence: 0
+  Throughput: 21499904.00 million ops/sec
+
+  Last consumption duration: 25.916708ms
+  Total duration: 11.102618084s
+Running test: SleepingWaitStrategy (2 consumers) (MultiConsume: true, BatchPublish: true)
+Test SleepingWaitStrategy (2 consumers) completed, waiting for producer to finish...
+Producer finished, produced: 389742592
+Producer finished, waiting for consumers to finish...
+Consumer 0 exiting due to context cancellation
+Consumer 0 exiting due to context cancellation
+  Produced: 389742592
+  Consumed: 779485182
+  Last Produced Sequence: 389742591
+  Last Consumed Sequence: 389742590
+  Cursor: 389742590
+  Producer Stalls: 47576
+  Consumer Stalls: 0
+  Max Batch Size: 8192
+  Total Batches: 95152
+  Min Consumed Sequence: -1
+  WARNING: Consumed count exceeds Produced count by 389742590
+  Throughput: 38974259.20 million ops/sec
+
+  Last consumption duration: 25.30525ms
+  Total duration: 11.182971292s
+Running test: BlockingWaitStrategy (1 consumer) (MultiConsume: false, BatchPublish: true)
+Test BlockingWaitStrategy (1 consumer) completed, waiting for producer to finish...
+Producer finished, produced: 2883256320
+Producer finished, waiting for consumers to finish...
+Consumer 0 exiting due to context cancellation
+  Produced: 2883256320
+  Consumed: 560264891
+  Last Produced Sequence: 2883256319
+  Last Consumed Sequence: 560264890
+  Cursor: 2883256318
+  Producer Stalls: 351960
+  Consumer Stalls: 92304
+  Max Batch Size: 8192
+  Total Batches: 68392
+  Min Consumed Sequence: 0
+  Throughput: 288325632.00 million ops/sec
+
+  Last consumption duration: 5.888835792s
+  Total duration: 16.962049125s
+Running test: BlockingWaitStrategy (1 consumer) (MultiConsume: true, BatchPublish: true)
+Test BlockingWaitStrategy (1 consumer) completed, waiting for producer to finish...
+Producer finished, produced: 2652012544
+Producer finished, waiting for consumers to finish...
+Consumer 0 exiting due to context cancellation
+  Produced: 2652012544
+  Consumed: 2003066879
+  Last Produced Sequence: 2652012543
+  Last Consumed Sequence: 2003066878
+  Cursor: 2652012542
+  Producer Stalls: 323732
+  Consumer Stalls: 0
+  Max Batch Size: 8192
+  Total Batches: 244515
+  Min Consumed Sequence: -1
+  Throughput: 265201254.40 million ops/sec
+
+  Last consumption duration: 39.685988167s
+  Total duration: 50.811585459s
+Running test: BlockingWaitStrategy (2 consumers) (MultiConsume: false, BatchPublish: true)
+Test BlockingWaitStrategy (2 consumers) completed, waiting for producer to finish...
+Producer finished, produced: 1497440256
+Producer finished, waiting for consumers to finish...
+Consumer 0 exiting due to context cancellation
+Consumer 0 exiting due to context cancellation
+  Produced: 1497440256
+  Consumed: 395427174
+  Last Produced Sequence: 1497440255
+  Last Consumed Sequence: 382852385
+  Cursor: 1497440254
+  Producer Stalls: 182793
+  Consumer Stalls: 183085
+  Max Batch Size: 8192
+  Total Batches: 62651
+  Min Consumed Sequence: 0
+  Throughput: 149744025.60 million ops/sec
+
+  Last consumption duration: 7.633683083s
+  Total duration: 18.760709334s
+Running test: BlockingWaitStrategy (2 consumers) (MultiConsume: true, BatchPublish: true)
+Test BlockingWaitStrategy (2 consumers) completed, waiting for producer to finish...
+Producer finished, produced: 1476681728
+Producer finished, waiting for consumers to finish...
+Consumer 0 exiting due to context cancellation
+Consumer 0 exiting due to context cancellation
+  Produced: 1476681728
+  Consumed: 1583456254
+  Last Produced Sequence: 1476681727
+  Last Consumed Sequence: 947003390
+  Cursor: 1476681726
+  Producer Stalls: 180259
+  Consumer Stalls: 0
+  Max Batch Size: 8192
+  Total Batches: 193293
+  Min Consumed Sequence: -1
+  WARNING: Consumed count exceeds Produced count by 106774526
+  Throughput: 147668172.80 million ops/sec
+
+  Last consumption duration: 17.869288042s
+  Total duration: 28.980355042s

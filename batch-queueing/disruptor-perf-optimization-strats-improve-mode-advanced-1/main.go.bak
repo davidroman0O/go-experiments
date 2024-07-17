@@ -1,0 +1,551 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"runtime"
+	"sync"
+	"sync/atomic"
+	"time"
+	"unsafe"
+)
+
+const (
+	cacheLine         = 64
+	producerBatchSize = 8192
+	consumerBatchSize = 8192
+)
+
+type padding [cacheLine]byte
+
+type RingBufferMode int
+
+const (
+	DispatchMode RingBufferMode = iota
+	BroadcastMode
+)
+
+type RingBuffer struct {
+	buffer          unsafe.Pointer
+	bufferMask      int64
+	_padding0       padding
+	cursor          *Sequence
+	_padding1       padding
+	gatingSequences []*Sequence
+	consumers       []*Consumer
+	producers       []*Producer
+	_padding2       padding
+	mode            RingBufferMode
+	shutdown        atomic.Bool
+	waitGroup       sync.WaitGroup
+}
+
+type Sequence struct {
+	value    uint64
+	_padding padding
+}
+
+func NewSequence(initial int64) *Sequence {
+	return &Sequence{value: uint64(initial)}
+}
+
+func (s *Sequence) Get() int64 {
+	return atomic.LoadInt64((*int64)(unsafe.Pointer(&s.value)))
+}
+
+func (s *Sequence) Set(value int64) {
+	atomic.StoreInt64((*int64)(unsafe.Pointer(&s.value)), value)
+}
+
+func (s *Sequence) IncrementAndGet() int64 {
+	return atomic.AddInt64((*int64)(unsafe.Pointer(&s.value)), 1) - 1
+}
+
+func NewRingBuffer(bufferSize int64, mode RingBufferMode, producers []*Producer, consumers []*Consumer) *RingBuffer {
+	if bufferSize < 1 || ((bufferSize & (bufferSize - 1)) != 0) {
+		panic("bufferSize must be a positive power of 2")
+	}
+	rb := &RingBuffer{
+		bufferMask: bufferSize - 1,
+		cursor:     NewSequence(-1),
+		mode:       mode,
+		producers:  producers,
+		consumers:  consumers,
+	}
+
+	buffer := make([]int64, bufferSize)
+	rb.buffer = unsafe.Pointer(&buffer[0])
+
+	for i := int64(0); i < bufferSize; i += 4096 / 8 {
+		buffer[i] = 0
+	}
+
+	for _, consumer := range consumers {
+		consumer.rb = rb
+		rb.gatingSequences = append(rb.gatingSequences, consumer.sequence)
+	}
+
+	for _, producer := range producers {
+		producer.rb = rb
+	}
+
+	return rb
+}
+
+func (rb *RingBuffer) Shutdown() {
+	rb.shutdown.Store(true)
+}
+
+func (rb *RingBuffer) Wait() {
+	rb.waitGroup.Wait()
+}
+
+type Producer struct {
+	rb           *RingBuffer
+	waitStrategy WaitStrategy
+	_padding0    padding
+}
+
+func NewProducer(waitStrategy WaitStrategy) *Producer {
+	return &Producer{
+		waitStrategy: waitStrategy,
+	}
+}
+
+func (p *Producer) Publish(value int64) bool {
+	if p.rb.shutdown.Load() {
+		return false
+	}
+	p.rb.waitGroup.Add(1)
+	defer p.rb.waitGroup.Done()
+
+	sequence := p.rb.cursor.IncrementAndGet()
+	dst := unsafe.Pointer(uintptr(p.rb.buffer) + uintptr(sequence&p.rb.bufferMask)*8)
+	atomic.StoreInt64((*int64)(dst), value)
+	atomic.StoreInt64((*int64)(unsafe.Pointer(&p.rb.cursor.value)), sequence)
+	p.waitStrategy.SignalAllWhenBlocking()
+	return true
+}
+
+func (p *Producer) PublishBatch(values []int64) bool {
+	if p.rb.shutdown.Load() {
+		return false
+	}
+	p.rb.waitGroup.Add(len(values))
+	defer p.rb.waitGroup.Add(-len(values))
+
+	n := int64(len(values))
+	sequence := p.rb.cursor.IncrementAndGet()
+	highSequence := sequence + n - 1
+
+	src := unsafe.Pointer(&values[0])
+	for i := int64(0); i < n; i++ {
+		dst := unsafe.Pointer(uintptr(p.rb.buffer) + uintptr((sequence+i)&p.rb.bufferMask)*8)
+		atomic.StoreInt64((*int64)(dst), *(*int64)(unsafe.Pointer(uintptr(src) + uintptr(i)*8)))
+	}
+
+	atomic.StoreInt64((*int64)(unsafe.Pointer(&p.rb.cursor.value)), highSequence)
+	p.waitStrategy.SignalAllWhenBlocking()
+	return true
+}
+
+type Consumer struct {
+	rb           *RingBuffer
+	sequence     *Sequence
+	handler      func([]int64)
+	waitStrategy WaitStrategy
+	id           int
+	_padding0    padding
+}
+
+func NewConsumer(handler func([]int64), waitStrategy WaitStrategy, id int) *Consumer {
+	return &Consumer{
+		sequence:     NewSequence(-1),
+		handler:      handler,
+		waitStrategy: waitStrategy,
+		id:           id,
+	}
+}
+
+func (c *Consumer) Start() {
+	go c.run()
+}
+
+func (c *Consumer) run() {
+	nextSequence := c.sequence.Get() + 1
+	eventsBatch := make([]int64, consumerBatchSize)
+
+	for !c.rb.shutdown.Load() || nextSequence <= c.rb.cursor.Get() {
+		availableSequence := c.waitStrategy.WaitFor(nextSequence, c.rb.cursor, c.sequence)
+
+		if c.rb.mode == DispatchMode {
+			consumerCount := len(c.rb.consumers)
+			for nextSequence <= availableSequence {
+				if consumerCount == 1 || nextSequence%int64(consumerCount) == int64(c.id) {
+					src := unsafe.Pointer(uintptr(c.rb.buffer) + uintptr(nextSequence&c.rb.bufferMask)*8)
+					event := atomic.LoadInt64((*int64)(src))
+					c.handler([]int64{event})
+					c.sequence.Set(nextSequence)
+				}
+				nextSequence++
+			}
+		} else { // Broadcast mode
+			batchSize := availableSequence - nextSequence + 1
+			if batchSize > consumerBatchSize {
+				batchSize = consumerBatchSize
+			}
+
+			for i := int64(0); i < batchSize; i++ {
+				src := unsafe.Pointer(uintptr(c.rb.buffer) + uintptr((nextSequence+i)&c.rb.bufferMask)*8)
+				eventsBatch[i] = atomic.LoadInt64((*int64)(src))
+			}
+
+			c.handler(eventsBatch[:batchSize])
+			nextSequence += batchSize
+			c.sequence.Set(nextSequence - 1)
+		}
+	}
+}
+
+type WaitStrategy interface {
+	WaitFor(sequence int64, cursor *Sequence, dependents ...*Sequence) int64
+	SignalAllWhenBlocking()
+}
+
+type BusySpinWaitStrategy struct{}
+
+func (BusySpinWaitStrategy) WaitFor(sequence int64, cursor *Sequence, dependents ...*Sequence) int64 {
+	for {
+		availableSequence := cursor.Get()
+		if availableSequence >= sequence {
+			return availableSequence
+		}
+		runtime.Gosched()
+	}
+}
+
+func (BusySpinWaitStrategy) SignalAllWhenBlocking() {}
+
+type YieldingWaitStrategy struct {
+	spinTries uint32
+}
+
+func NewYieldingWaitStrategy() *YieldingWaitStrategy {
+	return &YieldingWaitStrategy{spinTries: 100}
+}
+
+func (y *YieldingWaitStrategy) WaitFor(sequence int64, cursor *Sequence, dependents ...*Sequence) int64 {
+	counter := y.spinTries
+
+	for {
+		availableSequence := cursor.Get()
+		if availableSequence >= sequence {
+			return availableSequence
+		}
+
+		counter--
+		if counter == 0 {
+			runtime.Gosched()
+			counter = y.spinTries
+		} else {
+			runtime.Gosched()
+		}
+	}
+}
+
+func (y *YieldingWaitStrategy) SignalAllWhenBlocking() {}
+
+type SleepingWaitStrategy struct {
+	retries int32
+}
+
+func NewSleepingWaitStrategy() *SleepingWaitStrategy {
+	return &SleepingWaitStrategy{retries: 200}
+}
+
+func (s *SleepingWaitStrategy) WaitFor(sequence int64, cursor *Sequence, dependents ...*Sequence) int64 {
+	counter := s.retries
+
+	for {
+		availableSequence := cursor.Get()
+		if availableSequence >= sequence {
+			return availableSequence
+		}
+
+		counter--
+		if counter <= 0 {
+			time.Sleep(1 * time.Millisecond)
+		} else if counter < 100 {
+			runtime.Gosched()
+		}
+	}
+}
+
+func (s *SleepingWaitStrategy) SignalAllWhenBlocking() {}
+
+type BlockingWaitStrategy struct {
+	mutex sync.Mutex
+	cond  *sync.Cond
+}
+
+func NewBlockingWaitStrategy() *BlockingWaitStrategy {
+	s := &BlockingWaitStrategy{}
+	s.cond = sync.NewCond(&s.mutex)
+	return s
+}
+
+func (b *BlockingWaitStrategy) WaitFor(sequence int64, cursor *Sequence, dependents ...*Sequence) int64 {
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+
+	for {
+		availableSequence := cursor.Get()
+		if availableSequence >= sequence {
+			return availableSequence
+		}
+		b.cond.Wait()
+	}
+}
+
+func (b *BlockingWaitStrategy) SignalAllWhenBlocking() {
+	b.cond.Broadcast()
+}
+
+func modeToString(mode RingBufferMode) string {
+	if mode == DispatchMode {
+		return "Dispatch"
+	}
+	return "Broadcast"
+}
+
+func main() {
+	runtime.GOMAXPROCS(runtime.NumCPU()) // cool thing with that implementation is that we can now use ALL cores
+	baseTests := []struct {
+		name          string
+		bufferSize    int64
+		waitStrategy  WaitStrategy
+		producerCount int
+		consumerCount int
+	}{
+		{"BusySpinWaitStrategy (1 producer, 1 consumer)", 1024 * 1024 * 64, &BusySpinWaitStrategy{}, 1, 1},
+		{"BusySpinWaitStrategy (1 producer, 2 consumers)", 1024 * 1024 * 64, &BusySpinWaitStrategy{}, 1, 2},
+		{"BusySpinWaitStrategy (2 producers, 1 consumer)", 1024 * 1024 * 64, &BusySpinWaitStrategy{}, 2, 1},
+		{"YieldingWaitStrategy (1 producer, 1 consumer)", 1024 * 1024 * 64, NewYieldingWaitStrategy(), 1, 1},
+		{"YieldingWaitStrategy (1 producer, 2 consumers)", 1024 * 1024 * 64, NewYieldingWaitStrategy(), 1, 2},
+		{"YieldingWaitStrategy (2 producers, 1 consumer)", 1024 * 1024 * 64, NewYieldingWaitStrategy(), 2, 1},
+		{"SleepingWaitStrategy (1 producer, 1 consumer)", 1024 * 1024 * 64, NewSleepingWaitStrategy(), 1, 1},
+		{"SleepingWaitStrategy (1 producer, 2 consumers)", 1024 * 1024 * 64, NewSleepingWaitStrategy(), 1, 2},
+		{"SleepingWaitStrategy (2 producers, 1 consumer)", 1024 * 1024 * 64, NewSleepingWaitStrategy(), 2, 1},
+		{"BlockingWaitStrategy (1 producer, 1 consumer)", 1024 * 1024 * 64, NewBlockingWaitStrategy(), 1, 1},
+		{"BlockingWaitStrategy (1 producer, 2 consumers)", 1024 * 1024 * 64, NewBlockingWaitStrategy(), 1, 2},
+		{"BlockingWaitStrategy (2 producers, 1 consumer)", 1024 * 1024 * 64, NewBlockingWaitStrategy(), 2, 1},
+	}
+
+	modes := []RingBufferMode{DispatchMode, BroadcastMode}
+
+	fmt.Println("Running tests with mixed Publish and PublishBatch:")
+	for _, mode := range modes {
+		for _, test := range baseTests {
+			runTest(test.name, test.bufferSize, test.waitStrategy, test.producerCount, test.consumerCount, mode)
+		}
+	}
+
+	fmt.Println("\nRunning tests with only Publish:")
+	for _, mode := range modes {
+		for _, test := range baseTests {
+			runTestPublishOnly(test.name, test.bufferSize, test.waitStrategy, test.producerCount, test.consumerCount, mode)
+		}
+	}
+
+	fmt.Println("\nRunning tests with half Publish and half PublishBatch:")
+	for _, mode := range modes {
+		for _, test := range baseTests {
+			runTestHalfPublishHalfBatch(test.name, test.bufferSize, test.waitStrategy, test.producerCount, test.consumerCount, mode)
+		}
+	}
+}
+
+func runTest(name string, bufferSize int64, waitStrategy WaitStrategy, producerCount, consumerCount int, mode RingBufferMode) {
+	fmt.Printf("Running test: %s (%s mode)\n", name, modeToString(mode))
+
+	var consumedCount atomic.Int64
+	consumers := make([]*Consumer, consumerCount)
+	for i := 0; i < consumerCount; i++ {
+		consumers[i] = NewConsumer(func(events []int64) {
+			consumedCount.Add(int64(len(events)))
+		}, waitStrategy, i)
+	}
+
+	producers := make([]*Producer, producerCount)
+	for i := 0; i < producerCount; i++ {
+		producers[i] = NewProducer(waitStrategy)
+	}
+
+	ringBuffer := NewRingBuffer(bufferSize, mode, producers, consumers)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	for _, consumer := range consumers {
+		consumer.Start()
+	}
+
+	var producedCount atomic.Int64
+	var running int32 = 1
+	for _, producer := range producers {
+		go func(p *Producer) {
+			counter := int64(0)
+			batch := make([]int64, producerBatchSize)
+			for atomic.LoadInt32(&running) == 1 {
+				if counter%2 == 0 { // Alternate between Publish and PublishBatch
+					if !p.Publish(counter) {
+						break
+					}
+					producedCount.Add(1)
+				} else {
+					for i := range batch {
+						counter++
+						batch[i] = counter
+					}
+					if !p.PublishBatch(batch) {
+						break
+					}
+					producedCount.Add(int64(len(batch)))
+				}
+				counter++
+			}
+		}(producer)
+	}
+
+	<-ctx.Done()
+	atomic.StoreInt32(&running, 0)
+	ringBuffer.Shutdown()
+	ringBuffer.Wait()
+
+	produced := producedCount.Load()
+	consumed := consumedCount.Load()
+	fmt.Printf("  Produced: %d\n", produced)
+	fmt.Printf("  Consumed: %d\n", consumed)
+	fmt.Printf("  Throughput: %.2f million ops/sec\n\n", float64(produced)/10000000)
+}
+
+func runTestPublishOnly(name string, bufferSize int64, waitStrategy WaitStrategy, producerCount, consumerCount int, mode RingBufferMode) {
+	fmt.Printf("Running test (Publish only): %s (%s mode)\n", name, modeToString(mode))
+
+	var consumedCount atomic.Int64
+	consumers := make([]*Consumer, consumerCount)
+	for i := 0; i < consumerCount; i++ {
+		consumers[i] = NewConsumer(func(events []int64) {
+			consumedCount.Add(int64(len(events)))
+		}, waitStrategy, i)
+	}
+
+	producers := make([]*Producer, producerCount)
+	for i := 0; i < producerCount; i++ {
+		producers[i] = NewProducer(waitStrategy)
+	}
+
+	ringBuffer := NewRingBuffer(bufferSize, mode, producers, consumers)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	for _, consumer := range consumers {
+		consumer.Start()
+	}
+
+	var producedCount atomic.Int64
+	var running int32 = 1
+	for _, producer := range producers {
+		go func(p *Producer) {
+			counter := int64(0)
+			for atomic.LoadInt32(&running) == 1 {
+				counter++
+				if !p.Publish(counter) {
+					break
+				}
+				producedCount.Add(1)
+			}
+		}(producer)
+	}
+
+	<-ctx.Done()
+	atomic.StoreInt32(&running, 0)
+	ringBuffer.Shutdown()
+	ringBuffer.Wait()
+
+	produced := producedCount.Load()
+	consumed := consumedCount.Load()
+	fmt.Printf("  Produced: %d\n", produced)
+	fmt.Printf("  Consumed: %d\n", consumed)
+	fmt.Printf("  Throughput: %.2f million ops/sec\n\n", float64(produced)/10000000)
+}
+
+func runTestHalfPublishHalfBatch(name string, bufferSize int64, waitStrategy WaitStrategy, producerCount, consumerCount int, mode RingBufferMode) {
+	fmt.Printf("Running test (Half Publish, Half Batch): %s (%s mode)\n", name, modeToString(mode))
+
+	var consumedCount atomic.Int64
+	consumers := make([]*Consumer, consumerCount)
+	for i := 0; i < consumerCount; i++ {
+		consumers[i] = NewConsumer(func(events []int64) {
+			consumedCount.Add(int64(len(events)))
+		}, waitStrategy, i)
+	}
+
+	producers := make([]*Producer, producerCount)
+	for i := 0; i < producerCount; i++ {
+		producers[i] = NewProducer(waitStrategy)
+	}
+
+	ringBuffer := NewRingBuffer(bufferSize, mode, producers, consumers)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	for _, consumer := range consumers {
+		consumer.Start()
+	}
+
+	var producedCount atomic.Int64
+	var running int32 = 1
+	for i, producer := range producers {
+		if i%2 == 0 {
+			go func(p *Producer) {
+				counter := int64(0)
+				for atomic.LoadInt32(&running) == 1 {
+					counter++
+					if !p.Publish(counter) {
+						break
+					}
+					producedCount.Add(1)
+				}
+			}(producer)
+		} else {
+			go func(p *Producer) {
+				counter := int64(0)
+				batch := make([]int64, producerBatchSize)
+				for atomic.LoadInt32(&running) == 1 {
+					for i := range batch {
+						counter++
+						batch[i] = counter
+					}
+					if !p.PublishBatch(batch) {
+						break
+					}
+					producedCount.Add(int64(len(batch)))
+				}
+			}(producer)
+		}
+	}
+
+	<-ctx.Done()
+	atomic.StoreInt32(&running, 0)
+	ringBuffer.Shutdown()
+	ringBuffer.Wait()
+
+	produced := producedCount.Load()
+	consumed := consumedCount.Load()
+	fmt.Printf("  Produced: %d\n", produced)
+	fmt.Printf("  Consumed: %d\n", consumed)
+	fmt.Printf("  Throughput: %.2f million ops/sec\n\n", float64(produced)/10000000)
+}

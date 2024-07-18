@@ -42,6 +42,9 @@ func (rb *RingBuffer) Publish(events []Event) {
 	}
 }
 
+var consumed int32
+var produced int32
+
 func (rb *RingBuffer) Consume(workerID int, wg *sync.WaitGroup) {
 	defer wg.Done()
 
@@ -68,7 +71,7 @@ func (rb *RingBuffer) Consume(workerID int, wg *sync.WaitGroup) {
 
 		// Process event
 		// fmt.Printf("Worker %d processed: %v\n", workerID, event.Data)
-
+		atomic.AddInt32(&consumed, 1)
 		atomic.StoreUint32(&rb.events[index].Ready, 0)
 		atomic.AddInt64(&rb.tail, 1)
 	}
@@ -99,6 +102,7 @@ func main() {
 				batch = append(batch, Event{ID: i + j, Data: fmt.Sprintf("Message %d", i+j)})
 			}
 			rb.Publish(batch)
+			atomic.AddInt32(&produced, int32(batchSize))
 			// time.Sleep(1 * time.Nanosecond) // Simulate time between batches
 			runtime.Gosched()
 		}
@@ -113,4 +117,6 @@ func main() {
 	elapsed := time.Since(start)
 
 	fmt.Printf("Processed messages in %s\n", elapsed)
+	fmt.Printf("Produced: %d\n", atomic.LoadInt32(&produced)/10)
+	fmt.Printf("Consumed: %d\n", atomic.LoadInt32(&consumed)/10)
 }
